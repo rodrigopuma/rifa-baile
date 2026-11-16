@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 import uuid
 from functools import lru_cache
@@ -43,8 +44,13 @@ def _jwks_client(url: str) -> jwt.PyJWKClient:
     return jwt.PyJWKClient(url, cache_keys=True)
 
 
+# Tolerância a pequenas diferenças de relógio entre este servidor e o Supabase (iat/exp).
+_CLOCK_LEEWAY_SECONDS = 30
+
+
 def decode_supabase_jwt(token: str) -> dict:
     s = get_settings()
+    alg = "?"
     try:
         header = jwt.get_unverified_header(token)
         alg = header.get("alg", "")
@@ -52,13 +58,17 @@ def decode_supabase_jwt(token: str) -> dict:
             if not s.supabase_jwt_secret:
                 raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Autenticação não configurada")
             return jwt.decode(token, s.supabase_jwt_secret, algorithms=["HS256"],
-                              audience=s.supabase_jwt_audience)
+                              audience=s.supabase_jwt_audience, leeway=_CLOCK_LEEWAY_SECONDS)
         if alg in ("RS256", "ES256") and s.supabase_url:
             key = _jwks_client(f"{s.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json")
             signing_key = key.get_signing_key_from_jwt(token)
-            return jwt.decode(token, signing_key.key, algorithms=[alg], audience=s.supabase_jwt_audience)
+            return jwt.decode(token, signing_key.key, algorithms=[alg], audience=s.supabase_jwt_audience,
+                              leeway=_CLOCK_LEEWAY_SECONDS)
     except jwt.PyJWTError as exc:
+        logging.getLogger("rifa").warning("Token admin recusado (alg=%s): %s: %s",
+                                          alg, type(exc).__name__, exc)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sessão inválida ou expirada") from exc
+    logging.getLogger("rifa").warning("Token admin recusado: algoritmo não suportado (alg=%s)", alg)
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token não suportado")
 
 

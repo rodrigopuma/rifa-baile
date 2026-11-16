@@ -23,7 +23,7 @@ def test_admin_requires_valid_admin(client, fresh_db):
                         "outro-segredo", algorithm="HS256")
     assert client.get("/api/admin/overview", headers={"Authorization": f"Bearer {forged}"}).status_code == 401
     # token expirado
-    expired = jwt.encode({"sub": str(uuid.uuid4()), "aud": "authenticated", "exp": int(time.time()) - 10},
+    expired = jwt.encode({"sub": str(uuid.uuid4()), "aud": "authenticated", "exp": int(time.time()) - 120},
                          get_settings().supabase_jwt_secret, algorithm="HS256")
     assert client.get("/api/admin/overview", headers={"Authorization": f"Bearer {expired}"}).status_code == 401
     # usuário autenticado, mas não cadastrado como administrador
