@@ -1,0 +1,48 @@
+{
+  "_como_usar": [
+    "Este é o ÚNICO arquivo que você precisa editar para configurar a rifa.",
+    "Depois de editar: faça commit e push no GitHub. O site (GitHub Pages) e a API (Render) se atualizam sozinhos.",
+    "O texto do regulamento fica em REGULAMENTO.md; os campos entre {{chaves}} são preenchidos com os valores daqui.",
+    "Para aplicar na hora, sem esperar o deploy:  cd backend && python -m scripts.aplicar_campanha",
+    "Itens marcados com TROCAR precisam ser preenchidos por você."
+  ],
+
+  "campanha": {
+    "nome": "Rifa Solidária",
+    "subtitulo": "Baile de Formatura de Aspirantes-a-Oficial",
+    "descricao": "Olá! Sou o Rodrigo, Aspirante-a-Oficial formando do CPOR/R. Criei esta rifa para ajudar a custear a minha participação no baile de formatura. Cada número custa pouco, ajuda muito e ainda concorre a um prêmio!",
+    "premio": "R$ 150,00 no Pix",
+    "preco_reais": 5.00,
+    "quantidade_numeros": 200,
+    "data_sorteio": "2026-12-19",
+    "_data_sorteio": "TROCAR se necessário. Use a data de um concurso da Loteria Federal (sorteios às quartas e aos sábados). Formato AAAA-MM-DD.",
+    "status": "active",
+    "_status": "active = vendendo | paused = pausada | closed = encerrada | draft = rascunho",
+    "autorizacao": "",
+    "imagem_cabecalho_url": ""
+  },
+
+  "organizador": {
+    "nome": "Rodrigo",
+    "apresentacao": "Aspirante-a-Oficial · formando do CPOR/R",
+    "whatsapp": "(81) 98630-2122",
+    "_whatsapp": "TROCAR pelo seu número.",
+    "instagram": "rodrigopumaa_",
+    "_instagram": "Opcional, sem @. Ex.: rodrigo.silva",
+    "foto": "organizador.jpg",
+    "_foto": "Arquivo dentro de frontend/public/. Formato retrato (4:5) fica melhor.",
+    "agradecimento": "Seu apoio me ajuda a chegar ao baile de formatura. Muito obrigado!"
+  },
+
+  "site": {
+    "chamada": "Rifa Solidária",
+    "titulo": "Baile de Formatura",
+    "subtitulo": "Aspirantes-a-Oficial · CPOR/R — Centro Heróis de Casa Forte",
+    "lema": "Disciplina, honra e espírito de corpo.",
+    "aviso": "Iniciativa pessoal de Rodrigo, formando do CPOR/R. Esta rifa não é organizada, patrocinada nem endossada pelo Exército Brasileiro, pelo CPOR/R ou pela comissão de formatura.",
+    "endereco": "https://rodrigopuma.github.io/rifa-baile/",
+    "_endereco": "TROCAR pelo endereço final do site (aparece no regulamento)."
+  },
+
+  "regulamento": "REGULAMENTO.md"
+}

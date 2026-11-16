@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  /* Paleta da formatura */
+  --color-oliva: #4b5320;
+  --color-oliva-700: #3d4419;
+  --color-oliva-50: #f1f2e8;
+  --color-militar: #283421;
+  --color-militar-900: #1e2719;
+  --color-tunica: #81868a;
+  --color-prata: #c0c5c9;
+  --color-prata-claro: #e3e6e8;
+  --color-marfim: #faf9f5;
+  --color-grafite: #252820;
+  --color-linha: #dcddd4;
+  --color-neutro: #ecebe5;
+  --color-alerta: #8a5a12;
+  --color-erro: #9b2c22;
+
+  --font-cerimonial: "Cinzel", "Times New Roman", serif;
+  --font-numeral: "Oswald", "Arial Narrow", sans-serif;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --radius-suave: 0.5rem;
+  --shadow-cartao: 0 1px 2px rgb(37 40 32 / 0.05), 0 4px 16px -8px rgb(37 40 32 / 0.12);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-marfim text-grafite font-sans antialiased;
+    /* Textura discreta de papel cerimonial — fica apenas no fundo da página,
+       nunca atrás de campos ou números (cards têm fundo sólido). */
+    background-image:
+      radial-gradient(ellipse at top, rgb(192 197 201 / 0.16), transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.15 0 0 0 0 0.16 0 0 0 0 0.12 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-oliva);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .cartao {
+    @apply rounded-suave border border-linha bg-white shadow-cartao;
+  }
+  .rotulo {
+    @apply block text-sm font-medium text-grafite;
+  }
+  .campo {
+    @apply mt-1.5 block w-full rounded-md border border-linha bg-white px-3.5 py-3 text-base text-grafite
+      placeholder:text-tunica/80 transition-colors focus:border-oliva focus:outline-none focus:ring-2 focus:ring-oliva/20;
+  }
+  .campo-erro {
+    @apply border-erro focus:border-erro focus:ring-erro/20;
+  }
+  .botao {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-oliva px-5 font-semibold text-marfim
+      transition hover:bg-oliva-700 active:translate-y-px disabled:cursor-not-allowed disabled:bg-tunica/50;
+  }
+  .botao-secundario {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-oliva/40 bg-white px-4
+      font-medium text-oliva transition hover:border-oliva hover:bg-oliva-50;
+  }
+  .botao-discreto {
+    @apply inline-flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-tunica hover:text-grafite;
+  }
+  .titulo-cerimonial {
+    @apply font-cerimonial tracking-wide text-militar;
+  }
+  .filete-prata {
+    background-image: linear-gradient(90deg, transparent, var(--color-prata) 20%, var(--color-prata) 80%, transparent);
+    height: 1px;
+  }
+}
+
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.animar-surgir { animation: surgir 0.25s ease-out both; }
+
+@media print {
+  body { background: white !important; }
+  .nao-imprimir { display: none !important; }
+}

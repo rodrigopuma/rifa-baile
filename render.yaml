@@ -1,0 +1,52 @@
+# Blueprint do Render (plano gratuito) para a API.
+# Render → New → Blueprint → escolha este repositório. Depois preencha as variáveis marcadas
+# com "sync: false" no painel do serviço (Environment).
+services:
+  - type: web
+    name: rifa-baile-api
+    runtime: python
+    plan: free
+    region: virginia
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /api/health
+    autoDeploy: true
+    # Também redeploya quando campanha.json ou REGULAMENTO.md mudam (ficam fora de backend/).
+    buildFilter:
+      paths:
+        - backend/**
+        - campanha.json
+        - REGULAMENTO.md
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # development permite o simulador. Ao passar para Mercado Pago, troque para production.
+      - key: ENVIRONMENT
+        value: development
+      - key: PAYMENT_MODE
+        value: simulator
+      # Supabase → Connect → "Session pooler" (porta 5432), com prefixo postgresql+psycopg://
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      # https://<nome-do-serviço>.onrender.com
+      - key: PUBLIC_BASE_URL
+        sync: false
+      # https://<seu-usuario>.github.io/<repositorio>
+      - key: FRONTEND_URL
+        sync: false
+      # https://<seu-usuario>.github.io   (só a origem, sem caminho)
+      - key: CORS_ORIGINS
+        sync: false
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_WEBHOOK_SECRET
+        sync: false
+      - key: CRON_SECRET
+        generateValue: true
+      - key: RECONCILE_INTERVAL_SECONDS
+        value: "30"
