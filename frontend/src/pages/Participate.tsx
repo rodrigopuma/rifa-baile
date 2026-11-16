@@ -13,7 +13,7 @@ type Field = "full_name" | "phone" | "email" | "cpf" | "consent";
 
 export default function Participate() {
   const { campaign, refresh } = useCampaignContext();
-  const { selected, dispatch, setNotice } = useSelection();
+  const { selected, dispatch, setNotice, setSubmitting: holdSelection } = useSelection();
   const navigate = useNavigate();
   const [form, setForm] = useState({ full_name: "", phone: "", email: "", cpf: "" });
   const [consent, setConsent] = useState(false);
@@ -42,6 +42,7 @@ export default function Participate() {
     setTouched({ full_name: true, phone: true, email: true, cpf: true, consent: true });
     if (Object.keys(errors).length || !campaign) return;
     setSubmitting(true);
+    holdSelection(true);
     setServerError(null);
     try {
       const { order, access_token } = await api.createOrder({
@@ -71,6 +72,7 @@ export default function Participate() {
       }
       setServerError(err instanceof Error ? err.message : "Não foi possível criar o pedido.");
     } finally {
+      holdSelection(false);
       setSubmitting(false);
     }
   }

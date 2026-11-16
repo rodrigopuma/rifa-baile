@@ -9,6 +9,9 @@ interface Ctx {
   notice: string | null;
   clearNotice: () => void;
   setNotice: (n: string | null) => void;
+  /** Enquanto o pedido está sendo criado, os próprios números ficam indisponíveis (Realtime)
+   *  antes de a resposta chegar. Durante esse intervalo, não tratá-los como "perdidos". */
+  setSubmitting: (v: boolean) => void;
 }
 const SelectionCtx = createContext<Ctx | null>(null);
 
@@ -17,11 +20,13 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
   const [selected, dispatch] = useReducer(selectionReducer, undefined, loadSelection);
   const [notice, setNotice] = useState<string | null>(null);
   const first = useRef(true);
+  const submitting = useRef(false);
 
   useEffect(() => saveSelection(selected), [selected]);
 
   // Se algum número escolhido ficar indisponível (outra pessoa reservou), remove e avisa.
   useEffect(() => {
+    if (submitting.current) return;
     const lost = selected.filter((n) => unavailable.has(n) || (campaign && n > campaign.total_numbers));
     if (lost.length) {
       dispatch({ type: "remove", numbers: lost });
@@ -38,7 +43,10 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
   }, [unavailable, campaign]);
 
   return (
-    <SelectionCtx.Provider value={{ selected, dispatch, notice, setNotice, clearNotice: () => setNotice(null) }}>
+    <SelectionCtx.Provider value={{
+      selected, dispatch, notice, setNotice, clearNotice: () => setNotice(null),
+      setSubmitting: (v: boolean) => { submitting.current = v; },
+    }}>
       {children}
     </SelectionCtx.Provider>
   );
