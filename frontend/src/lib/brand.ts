@@ -21,6 +21,11 @@ export const ORGANIZER = {
   thanks: config.organizador.agradecimento,
 };
 
+/** Meta do prêmio maior (campanha.json → premio_extra); null se não houver. */
+const extra = (config.campanha as { premio_extra?: { acima_de_numeros?: number; premio?: string } }).premio_extra;
+export const PRIZE_GOAL =
+  extra?.acima_de_numeros && extra.premio ? { numbers: extra.acima_de_numeros, label: `prêmio sobe para ${extra.premio}` } : null;
+
 /** Chave Pix do organizador (modo manual), lida do campanha.json → "pagamento". */
 export const PAYMENT = {
   pixKey: (config.pagamento?.pix_chave ?? "").trim(),

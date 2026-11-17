@@ -9,7 +9,7 @@ import { PageLoading } from "../components/Spinner";
 import { useCampaignContext } from "../hooks/CampaignContext";
 import { useSelection } from "../hooks/SelectionContext";
 import { dateLong, money } from "../lib/format";
-import { ORGANIZER, nb, whatsappLink } from "../lib/brand";
+import { ORGANIZER, PRIZE_GOAL, nb, whatsappLink } from "../lib/brand";
 
 export default function Home() {
   const { campaign, unavailable, availableCount, loading, error, refresh } = useCampaignContext();
@@ -103,7 +103,7 @@ export default function Home() {
             </div>
           </dl>
           <div className="mt-4">
-            <ProgressBar value={taken} total={campaign.total_numbers} />
+            <ProgressBar value={taken} total={campaign.total_numbers} goal={PRIZE_GOAL ?? undefined} />
           </div>
           <p className="mt-3 text-[13px]">
             <Link to="/regulamento" className="font-medium text-oliva underline-offset-4 hover:underline">
