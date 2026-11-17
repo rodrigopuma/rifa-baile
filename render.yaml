@@ -21,11 +21,18 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
-      # development permite o simulador. Ao passar para Mercado Pago, troque para production.
+      # manual_pix = Pix direto na sua chave; você confirma cada pagamento no painel (sem Mercado Pago).
+      # Outros valores: simulator (só testes; exige ENVIRONMENT=development), mercadopago_test, mercadopago_live.
       - key: ENVIRONMENT
-        value: development
+        value: production
       - key: PAYMENT_MODE
-        value: simulator
+        value: manual_pix
+      # Por quanto tempo os números ficam reservados esperando pagamento e confirmação (minutos).
+      - key: MANUAL_HOLD_MINUTES
+        value: "1440"
+      # Tópico do ntfy para avisar no celular de cada nova reserva (vazio = sem aviso). Trate como senha.
+      - key: NTFY_TOPIC
+        sync: false
       # Supabase → Connect → "Session pooler" (porta 5432), com prefixo postgresql+psycopg://
       - key: DATABASE_URL
         sync: false

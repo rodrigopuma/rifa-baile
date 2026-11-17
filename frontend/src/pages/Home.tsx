@@ -66,7 +66,15 @@ export default function Home() {
               <span className="font-numeral text-xs uppercase tracking-[0.3em]">Prêmio</span>
               <Laurel className="h-4 w-9" mirrored />
             </div>
-            <p className="mt-1 font-cerimonial text-2xl font-semibold sm:text-3xl">{campaign.prize_title}</p>
+            {(() => {
+              const [main, extra] = campaign.prize_title.split(" · ");
+              return (
+                <>
+                  <p className="mt-1 font-cerimonial text-2xl font-semibold sm:text-3xl">{main}</p>
+                  {extra ? <p className="text-sm text-prata">{extra}</p> : null}
+                </>
+              );
+            })()}
             {campaign.draw_date ? (
               <p className="mt-1 text-[13px] text-prata">
                 Sorteio pela Loteria Federal · {dateLong(campaign.draw_date)}
@@ -80,6 +88,11 @@ export default function Home() {
             <div>
               <dt className="text-xs uppercase tracking-wider text-tunica">Valor por número</dt>
               <dd className="font-numeral text-2xl text-militar">{money(campaign.price_cents)}</dd>
+              {campaign.bundle_size >= 2 ? (
+                <dd className="text-[13px] font-medium text-oliva">
+                  {campaign.bundle_size} por {money(campaign.bundle_price_cents)}
+                </dd>
+              ) : null}
             </div>
             <div>
               <dt className="text-xs uppercase tracking-wider text-tunica">Números livres</dt>
@@ -134,7 +147,10 @@ export default function Home() {
           selected={selected}
           total={campaign.total_numbers}
           priceCents={campaign.price_cents}
+          bundleSize={campaign.bundle_size}
+          bundlePriceCents={campaign.bundle_price_cents}
           disabled={!active}
+          actionLabel={campaign.payment_mode === "manual" ? "Reservar números" : undefined}
           onClear={() => dispatch({ type: "clear" })}
           onContinue={() => navigate("/participar")}
         />

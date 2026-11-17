@@ -1,17 +1,22 @@
-import { money, padNumber } from "../lib/format";
+import { money, orderTotal, padNumber } from "../lib/format";
 
 interface Props {
   selected: number[];
   total: number;
   priceCents: number;
+  bundleSize?: number;
+  bundlePriceCents?: number;
   onClear: () => void;
   onContinue: () => void;
   disabled?: boolean;
+  actionLabel?: string;
 }
 
 /** Barra fixa com o resumo da seleção e o botão de continuar. */
-export function SelectionSummary({ selected, total, priceCents, onClear, onContinue, disabled }: Props) {
+export function SelectionSummary({ selected, total, priceCents, bundleSize = 0, bundlePriceCents = 0, onClear, onContinue, disabled, actionLabel }: Props) {
   const count = selected.length;
+  const sum = orderTotal(priceCents, bundleSize, bundlePriceCents, count);
+  const saved = count * priceCents - sum;
   return (
     <div className="nao-imprimir sticky bottom-0 z-20 -mx-4 mt-6 border-t border-linha bg-marfim/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:mx-0 sm:rounded-t-lg sm:border-x">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -19,10 +24,13 @@ export function SelectionSummary({ selected, total, priceCents, onClear, onConti
           <p className="text-[13px] text-tunica">
             {count === 0 ? "Nenhum número escolhido" : count === 1 ? "1 número escolhido" : `${count} números escolhidos`}
           </p>
-          <p className="font-numeral text-2xl leading-tight text-militar">{money(count * priceCents)}</p>
+          <p className="font-numeral text-2xl leading-tight text-militar">
+            {money(sum)}
+            {saved > 0 ? <span className="ml-2 text-sm text-oliva">economia de {money(saved)}</span> : null}
+          </p>
         </div>
         <button className="botao w-full min-[460px]:w-auto" onClick={onContinue} disabled={disabled || count === 0}>
-          Continuar para pagamento
+          {actionLabel ?? "Continuar para pagamento"}
         </button>
       </div>
       {count > 0 ? (

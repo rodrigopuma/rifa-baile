@@ -268,6 +268,10 @@ def request_cancellation(db: Session, order_id: uuid.UUID, *, reason: str, actor
 def reconcile_once(db: Session, batch: int = 50) -> dict[str, int]:
     """Uma rodada de conciliação. Seguro para rodar em paralelo (transições idempotentes)."""
     s = get_settings()
+    if s.is_manual:
+        from . import manual
+
+        return manual.reconcile(db)
     now = utcnow()
     stats = {"checkout_expired": 0, "synced": 0, "errors": 0}
 

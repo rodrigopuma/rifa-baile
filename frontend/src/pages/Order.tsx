@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Divider } from "../components/Divider";
 import { Laurel } from "../components/Laurel";
@@ -10,10 +10,13 @@ import { useCountdown } from "../hooks/useCountdown";
 import { ApiError, api } from "../lib/api";
 import { dateTime, money, padNumber } from "../lib/format";
 import { getOrderToken, receiptUrl } from "../lib/orderStore";
-import { ORGANIZER } from "../lib/brand";
+import { ORGANIZER, PAYMENT, whatsappLink } from "../lib/brand";
+import { pixBrCode } from "../lib/pix";
+import QRCode from "qrcode";
 import type { OrderView } from "../lib/types";
 
 const POLL_MS = 4000;
+const MANUAL_POLL_MS = 10000; // no modo manual a confirmação depende de uma pessoa: não precisa ser tão frequente
 
 export default function Order() {
   const { id = "" } = useParams();
@@ -40,9 +43,10 @@ export default function Order() {
   const waiting = order?.status === "awaiting_payment" || order?.status === "awaiting_confirmation";
   useEffect(() => {
     if (!waiting) return;
-    const t = window.setInterval(load, order?.status === "awaiting_payment" ? POLL_MS : POLL_MS * 3);
+    const every = order?.payment_mode === "manual" ? MANUAL_POLL_MS : POLL_MS;
+    const t = window.setInterval(load, order?.status === "awaiting_payment" ? every : every * 3);
     return () => window.clearInterval(t);
-  }, [waiting, order?.status, load]);
+  }, [waiting, order?.status, order?.payment_mode, load]);
 
   useEffect(() => {
     if (order && !waiting) refreshCampaign();
@@ -75,6 +79,8 @@ export default function Order() {
     <Layout campaign={campaign}>
       {order.status === "paid" ? (
         <Confirmation order={order} total={total} token={token} />
+      ) : order.status === "awaiting_payment" && !countdown.done && order.payment_mode === "manual" ? (
+        <ManualCheckout order={order} total={total} token={token} />
       ) : order.status === "awaiting_payment" && !countdown.done && order.pix ? (
         <Checkout order={order} total={total} countdown={countdown} onSimulated={load} />
       ) : (
@@ -201,6 +207,141 @@ function Checkout({
   );
 }
 
+/** Modo manual: o participante paga por Pix direto na chave do organizador, avisa pelo WhatsApp e
+ *  espera a confirmação. A página atualiza sozinha quando o organizador confirma. */
+function ManualCheckout({ order, total, token }: { order: OrderView; total: number; token: string }) {
+  const [copied, setCopied] = useState<"key" | "code" | "link" | null>(null);
+  const [qr, setQr] = useState("");
+  const brCode = useMemo(
+    () => PAYMENT.pixKey
+      ? pixBrCode({ key: PAYMENT.pixKey, type: PAYMENT.pixType, name: PAYMENT.holder || ORGANIZER.name, city: PAYMENT.city,
+                    amountCents: order.total_cents, txid: order.code })
+      : "",
+    [order.total_cents, order.code],
+  );
+  useEffect(() => {
+    if (brCode) QRCode.toDataURL(brCode, { margin: 1, width: 400, errorCorrectionLevel: "M" }).then(setQr).catch(() => setQr(""));
+  }, [brCode]);
+  const numbers = order.numbers.map((n) => padNumber(n, total)).join(", ");
+  const message =
+    `Olá, ${ORGANIZER.name}! Sou ${order.participant_first_name}. Reservei ${order.quantity === 1 ? "o número" : "os números"} ` +
+    `${numbers} na rifa (pedido ${order.code}, ${money(order.total_cents)}). Segue o comprovante do Pix.`;
+  const wa = whatsappLink(message);
+  const askKey = whatsappLink(`Olá, ${ORGANIZER.name}! Reservei ${numbers} na rifa (pedido ${order.code}). Pode me passar a chave Pix?`);
+  const orderLink = `${window.location.origin}${import.meta.env.BASE_URL}pedido/${order.id}#t=${encodeURIComponent(token)}`;
+
+  async function copy(text: string, what: "key" | "code" | "link") {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* sem permissão de área de transferência: o texto continua visível para copiar à mão */
+    }
+    setCopied(what);
+    window.setTimeout(() => setCopied(null), 2500);
+  }
+
+  return (
+    <div className="animar-surgir space-y-4">
+      <div>
+        <h2 className="titulo-cerimonial text-lg sm:text-xl">Reserva feita ✓</h2>
+        <p className="mt-0.5 text-sm text-tunica">Pedido {order.code} · falta só o pagamento</p>
+      </div>
+
+      <section className="cartao px-5 py-4">
+        <p className="mb-2 text-sm text-tunica">Números reservados para você</p>
+        <NumberChips numbers={order.numbers} total={total} />
+        <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-linha pt-3">
+          <p className="text-sm text-tunica">Valor a pagar</p>
+          <p className="font-numeral text-3xl text-militar">{money(order.total_cents)}</p>
+        </div>
+      </section>
+
+      <section className="cartao space-y-4 px-5 py-5">
+        <Step n={1} title="Pague por Pix">
+          {PAYMENT.pixKey ? (
+            <>
+              <p className="text-sm text-tunica">
+                Chave Pix{PAYMENT.pixType ? ` (${PAYMENT.pixType})` : ""}
+                {PAYMENT.holder ? <> · em nome de <b className="text-grafite">{PAYMENT.holder}</b></> : null}
+              </p>
+              {qr ? (
+                <div className="mx-auto mb-3 w-fit rounded-lg border border-linha bg-white p-2">
+                  <img src={qr} alt={`QR Code Pix de ${money(order.total_cents)}`} className="h-52 w-52" />
+                </div>
+              ) : null}
+              {brCode ? (
+                <button className="botao mb-3 w-full" onClick={() => copy(brCode, "code")}>
+                  {copied === "code" ? "Código copiado ✓" : `Copiar Pix copia e cola · ${money(order.total_cents)}`}
+                </button>
+              ) : null}
+              <p className="text-[13px] text-tunica">Ou pague pela chave:</p>
+              <input
+                id="pix-key" readOnly value={PAYMENT.pixKey} aria-label="Chave Pix"
+                className="campo mt-1 font-mono text-sm" onFocus={(e) => e.currentTarget.select()}
+              />
+              <button className="botao mt-2 w-full" onClick={() => copy(PAYMENT.pixKey, "key")}>
+                {copied === "key" ? "Chave copiada ✓" : "Copiar chave Pix"}
+              </button>
+              <p className="mt-2 text-[13px] text-tunica">
+                No app do banco, escolha <b>Pix</b> e leia o QR Code (ou use "Pix copia e cola"): o valor de <b>{money(order.total_cents)}</b> já vem preenchido. Se pagar pela chave, digite esse valor.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-tunica">
+                {ORGANIZER.name} vai te passar a chave Pix pelo WhatsApp. Toque no botão abaixo para pedir.
+              </p>
+              {askKey ? (
+                <a href={askKey} target="_blank" rel="noreferrer" className="botao mt-2 w-full">Pedir a chave Pix no WhatsApp</a>
+              ) : null}
+            </>
+          )}
+        </Step>
+
+        <Step n={2} title="Mande o comprovante no WhatsApp">
+          <p className="text-sm text-tunica">
+            Assim eu sei que foi você e confirmo mais rápido. A mensagem já vai pronta; é só anexar o comprovante.
+          </p>
+          {wa ? (
+            <a href={wa} target="_blank" rel="noreferrer" className="botao-secundario mt-2 w-full">Enviar comprovante no WhatsApp</a>
+          ) : null}
+        </Step>
+
+        <Step n={3} title="Aguarde a confirmação">
+          <p className="flex items-center gap-2 text-sm text-tunica">
+            <Spinner className="h-4 w-4 shrink-0 text-oliva" />
+            Quando eu conferir o pagamento, esta página muda sozinha para "Confirmado" e libera o seu comprovante.
+          </p>
+        </Step>
+      </section>
+
+      <Notice tone="warn">
+        Sua reserva vale até <b>{dateTime(order.checkout_expires_at)}</b>. Se o pagamento não for confirmado até lá, os números voltam para a venda.
+      </Notice>
+
+      <section className="cartao px-5 py-4">
+        <p className="text-sm font-medium">Guarde o link deste pedido</p>
+        <p className="mt-0.5 text-[13px] text-tunica">Ele leva você de volta a esta página, em qualquer aparelho.</p>
+        <button className="botao-secundario mt-2 w-full" onClick={() => copy(orderLink, "link")}>
+          {copied === "link" ? "Link copiado ✓" : "Copiar link do pedido"}
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-oliva font-numeral text-sm text-marfim" aria-hidden="true">{n}</span>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-grafite">{title}</p>
+        <div className="mt-1">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 function Confirmation({ order, total, token }: { order: OrderView; total: number; token: string }) {
   const [copied, setCopied] = useState(false);
   const link = receiptUrl(order.id, token);
@@ -283,7 +424,24 @@ function Closed({ order, total }: { order: OrderView; total: number }) {
       tone: "warn",
     },
   };
+  if (order.payment_mode === "manual") {
+    texts.awaiting_payment = {
+      title: "Reserva encerrada",
+      body: "O prazo da reserva terminou. Se você já pagou, chame o organizador no WhatsApp: ele confere e confirma.",
+      tone: "warn",
+    };
+    texts.expired = {
+      title: "Reserva vencida",
+      body:
+        "O pagamento não foi confirmado a tempo e os números voltaram para a venda. Se você já pagou, chame o organizador no " +
+        "WhatsApp: se os números ainda estiverem livres, ele confirma mesmo assim.",
+      tone: "warn",
+    };
+    texts.cancelled = { title: "Reserva cancelada", body: "A reserva foi cancelada e os números voltaram para a venda.", tone: "info" };
+    texts.refunded = { title: "Pagamento estornado", body: "Este pagamento foi estornado e os números voltaram para a venda.", tone: "info" };
+  }
   const t = texts[order.status] ?? texts.cancelled;
+  const help = order.payment_mode === "manual" ? whatsappLink(`Olá, ${ORGANIZER.name}! Sobre o pedido ${order.code} da rifa.`) : "";
   return (
     <div className="animar-surgir space-y-4">
       <h2 className="titulo-cerimonial text-lg sm:text-xl">{t.title}</h2>
@@ -292,6 +450,7 @@ function Closed({ order, total }: { order: OrderView; total: number }) {
         <p className="mb-2 text-sm text-tunica">Pedido {order.code} · {money(order.total_cents)}</p>
         <NumberChips numbers={order.numbers} total={total} />
       </section>
+      {help ? <a href={help} target="_blank" rel="noreferrer" className="botao-secundario w-full">Falar com o organizador no WhatsApp</a> : null}
       {order.status !== "awaiting_confirmation" && order.status !== "in_review" ? (
         <Link to="/" className="botao w-full">Escolher números novamente</Link>
       ) : null}

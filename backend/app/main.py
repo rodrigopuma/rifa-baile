@@ -20,7 +20,9 @@ log = logging.getLogger("rifa")
 async def lifespan(app: FastAPI):
     s = get_settings()
     log.info("Modo de pagamento: %s", s.payment_mode)
-    if s.payment_mode != "mercadopago_live":
+    if s.is_manual:
+        log.info("Modo manual: Pix direto na chave do organizador; ele confirma cada pagamento no painel.")
+    elif s.payment_mode != "mercadopago_live":
         log.warning("AMBIENTE DE TESTES: nenhuma cobrança real será realizada.")
     if s.auto_apply_campaign_config:
         await run_in_threadpool(_apply_campaign_config)

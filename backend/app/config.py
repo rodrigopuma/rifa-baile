@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-PaymentMode = Literal["simulator", "mercadopago_test", "mercadopago_live"]
+PaymentMode = Literal["simulator", "manual_pix", "mercadopago_test", "mercadopago_live"]
 
 # Frase exigida para habilitar cobranças reais. Serve como trava consciente:
 # só deve ser preenchida depois de verificada a autorização legal da modalidade
@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     checkout_window_minutes: int = 15      # contador visual exibido ao participante
     pix_expiration_minutes: int = 30       # vencimento enviado ao Mercado Pago (mínimo 30)
     orphan_order_grace_seconds: int = 120
+    # Modo manual (PAYMENT_MODE=manual_pix): por quanto tempo os números ficam reservados
+    # esperando o participante pagar e o organizador confirmar.
+    manual_hold_minutes: int = 1440
+    # Aviso no celular a cada nova reserva (app ntfy). Vazio = desligado. O tópico funciona como senha: use algo longo e aleatório.
+    ntfy_topic: str = ""
+    ntfy_server: str = "https://ntfy.sh"
 
     # Limites
     max_numbers_per_order: int = 50
@@ -75,7 +81,9 @@ class Settings(BaseSettings):
     def _guards(self) -> "Settings":
         if self.checkout_window_minutes > self.pix_expiration_minutes:
             raise ValueError("CHECKOUT_WINDOW_MINUTES não pode ser maior que PIX_EXPIRATION_MINUTES")
-        if self.payment_mode != "simulator":
+        if self.manual_hold_minutes < 15:
+            raise ValueError("MANUAL_HOLD_MINUTES deve ser >= 15")
+        if self.payment_mode in ("mercadopago_test", "mercadopago_live"):
             if not self.mp_access_token:
                 raise ValueError("MP_ACCESS_TOKEN é obrigatório nos modos Mercado Pago")
             if not self.mp_webhook_secret:
@@ -107,10 +115,14 @@ class Settings(BaseSettings):
         return self.payment_mode == "mercadopago_live"
 
     @property
+    def is_manual(self) -> bool:
+        """Pix direto na chave do organizador; ele confirma cada pagamento no painel."""
+        return self.payment_mode == "manual_pix"
+
+    @property
     def public_payment_mode(self) -> str:
-        return {"simulator": "simulator", "mercadopago_test": "test", "mercadopago_live": "live"}[
-            self.payment_mode
-        ]
+        return {"simulator": "simulator", "manual_pix": "manual", "mercadopago_test": "test",
+                "mercadopago_live": "live"}[self.payment_mode]
 
 
 @lru_cache

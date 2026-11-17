@@ -46,3 +46,27 @@ export const isValidPhone = (v: string) => {
 };
 
 export const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+
+/** "24 h", "90 min"… para prazos em minutos. */
+export function durationLabel(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const h = minutes / 60;
+  return Number.isInteger(h) ? `${h} h` : `${Math.round(h * 10) / 10} h`.replace(".", ",");
+}
+
+/** "há 3 h", "há 25 min", "há 2 dias" a partir de um instante ISO. */
+export function ago(iso: string, now = Date.now()): string {
+  const min = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
+  if (min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  return h < 48 ? `há ${h} h` : `há ${Math.floor(h / 24)} dias`;
+}
+
+/** Total do pedido com pacote (espelha services/pricing.py): a cada `bundleSize` números, o grupo custa `bundlePrice`. */
+export function orderTotal(unit: number, bundleSize: number, bundlePrice: number, qty: number): number {
+  if (bundleSize >= 2 && bundlePrice > 0) {
+    return Math.floor(qty / bundleSize) * bundlePrice + (qty % bundleSize) * unit;
+  }
+  return qty * unit;
+}

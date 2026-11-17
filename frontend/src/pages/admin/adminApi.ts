@@ -49,6 +49,8 @@ export interface AdminCampaign {
   description: string;
   prize_title: string;
   price_cents: number;
+  bundle_size: number;
+  bundle_price_cents: number;
   total_numbers: number;
   draw_date: string | null;
   organizer_name: string;
@@ -97,6 +99,10 @@ export function adminApi(token: string) {
       r<{ total: number; items: AdminPayment[] }>(`/api/admin/payments?${qs({ status, page })}`),
     syncPayment: (id: string) => r<AdminPayment>(`/api/admin/payments/${id}/sync`, { method: "POST" }),
     cancelOrder: (id: string) => r<AdminOrder>(`/api/admin/orders/${id}/cancel`, { method: "POST" }),
+    /** Modo manual: o organizador conferiu o Pix no banco. */
+    confirmOrder: (id: string) => r<AdminOrder>(`/api/admin/orders/${id}/confirm`, { method: "POST" }),
+    /** Modo manual: desfaz uma confirmação e libera os números. */
+    refundOrder: (id: string) => r<AdminOrder>(`/api/admin/orders/${id}/refund`, { method: "POST" }),
     audit: (page = 1) => r<{ items: AuditEntry[] }>(`/api/admin/audit-logs?${qs({ page })}`),
     campaigns: () => r<{ items: AdminCampaign[] }>("/api/admin/campaigns"),
     createCampaign: (body: unknown) => r<AdminCampaign>("/api/admin/campaigns", { method: "POST", body: JSON.stringify(body) }),

@@ -31,7 +31,8 @@ export default function PaymentsTab({ api }: { api: AdminApi }) {
   return (
     <div className="space-y-6">
       <Notice tone="info">
-        Pagamentos são confirmados exclusivamente pelo Mercado Pago (webhook ou consulta). Não há aprovação manual.
+        Modo Mercado Pago: pagamentos são confirmados só pelo Mercado Pago (webhook ou consulta), sem aprovação manual.
+        Modo manual (Pix direto): você confirma cada pagamento na aba Visão geral, conferindo o Pix no app do seu banco.
       </Notice>
       <div className="flex items-center justify-between gap-3">
         <h2 className="titulo-cerimonial text-lg">Transações</h2>
@@ -70,9 +71,11 @@ export default function PaymentsTab({ api }: { api: AdminApi }) {
                 <td className="px-4 py-2.5 text-[13px]">{dateTime(p.created_at)}</td>
                 <td className="px-4 py-2.5 text-[13px]">{p.approved_at ? dateTime(p.approved_at) : "—"}</td>
                 <td className="px-4 py-2.5 text-right">
-                  <button className="botao-discreto text-oliva" disabled={busyId === p.id} onClick={() => sync(p.id)}>
-                    {busyId === p.id ? "Consultando…" : "Atualizar"}
-                  </button>
+                  {p.provider === "manual" ? null : (
+                    <button className="botao-discreto text-oliva" disabled={busyId === p.id} onClick={() => sync(p.id)}>
+                      {busyId === p.id ? "Consultando…" : "Atualizar"}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

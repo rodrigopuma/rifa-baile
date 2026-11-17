@@ -21,8 +21,18 @@ export const ORGANIZER = {
   thanks: config.organizador.agradecimento,
 };
 
-/** Link de WhatsApp (wa.me) a partir do número configurado; vazio se ainda não preenchido. */
-export function whatsappLink(): string {
+/** Chave Pix do organizador (modo manual), lida do campanha.json → "pagamento". */
+export const PAYMENT = {
+  pixKey: (config.pagamento?.pix_chave ?? "").trim(),
+  pixType: (config.pagamento?.pix_tipo ?? "").trim(),
+  holder: (config.pagamento?.pix_titular ?? "").trim(),
+  city: (config.pagamento?.pix_cidade ?? "Recife").trim(),
+};
+
+/** Link de WhatsApp (wa.me) a partir do número configurado; vazio se ainda não preenchido.
+ *  Com `text`, a conversa já abre com a mensagem pronta. */
+export function whatsappLink(text?: string): string {
   const d = ORGANIZER.whatsapp.replace(/\D+/g, "");
-  return d.length === 11 ? `https://wa.me/55${d}` : "";
+  if (d.length !== 11) return "";
+  return `https://wa.me/55${d}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 }

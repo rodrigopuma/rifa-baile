@@ -19,7 +19,8 @@ from ..providers import get_provider
 from ..providers.base import CreatePixRequest, PayerInfo, ProviderError, ProviderPayment
 from ..security import hash_token, new_access_token, new_order_code
 from ..validators import mask_cpf
-from . import audit
+from . import audit, manual, notify
+from .pricing import order_total_cents
 from .campaigns import get_active_campaign
 from .reservations import NumbersUnavailable, release_order_numbers, reserve, unavailable_among
 
@@ -50,9 +51,13 @@ def _get_or_create_participant(db: Session, full_name: str, email: str, phone: s
 
 
 def _pending_orders_for_contact(db: Session, email: str, phone: str) -> int:
+    # Sem e-mail (modo manual), só o WhatsApp identifica a pessoa; comparar e-mails vazios
+    # contaria os pedidos de TODO mundo.
+    same_contact = or_(Participant.email == email, Participant.phone == phone) if email else (
+        Participant.phone == phone)
     return db.execute(
         select(func.count()).select_from(Order).join(Participant)
-        .where(Order.status == "pending", or_(Participant.email == email, Participant.phone == phone))
+        .where(Order.status == "pending", same_contact)
     ).scalar_one()
 
 
@@ -65,6 +70,9 @@ def create_order(db: Session, *, numbers: list[int], full_name: str, email: str,
     if s.is_live and not campaign.authorization_info.strip():
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "Campanha sem informações de autorização: cobranças reais bloqueadas.")
+
+    if s.is_manual:
+        manual.expire_due(db)  # libera reservas vencidas antes de checar a disponibilidade
 
     wanted = sorted(set(numbers))
     if not wanted:
@@ -82,28 +90,37 @@ def create_order(db: Session, *, numbers: list[int], full_name: str, email: str,
     if taken:
         raise _conflict(taken)
 
-    # O preço vem SEMPRE do banco; valores enviados pelo navegador são ignorados.
+    # O preço vem SEMPRE do banco (inclusive o pacote); valores enviados pelo navegador são ignorados.
     unit = campaign.price_cents
     now = utcnow()
     token = new_access_token()
-    order = _reserve_with_retry(db, campaign, wanted, full_name, email, phone, cpf, unit, now, token)
+    order = _reserve_with_retry(db, campaign, wanted, full_name, email, phone, cpf, unit, now, token,
+                                hold_minutes=s.manual_hold_minutes if s.is_manual else None)
+    if s.is_manual:
+        order = manual.attach_payment(db, order)
+        notify.notify_new_reservation(order, wanted, len(str(campaign.total_numbers)))
+        return order, token
 
     pp = _create_charge(db, campaign, order, full_name, email, cpf)
     return _attach_payment(db, order, pp), token
 
 
 def _reserve_with_retry(db: Session, campaign: Campaign, wanted: list[int], full_name: str, email: str,
-                        phone: str, cpf: str | None, unit: int, now, token: str) -> Order:
+                        phone: str, cpf: str | None, unit: int, now, token: str,
+                        hold_minutes: int | None = None) -> Order:
     s = get_settings()
+    checkout_minutes = hold_minutes if hold_minutes is not None else s.checkout_window_minutes
+    payment_minutes = hold_minutes if hold_minutes is not None else s.pix_expiration_minutes
     for attempt in range(3):
         try:
             participant = _get_or_create_participant(db, full_name, email, phone, cpf)
             order = Order(
                 id=uuid.uuid4(), code=new_order_code(), campaign_id=campaign.id, participant_id=participant.id,
-                status="pending", unit_price_cents=unit, quantity=len(wanted), total_cents=unit * len(wanted),
+                status="pending", unit_price_cents=unit, quantity=len(wanted),
+                total_cents=order_total_cents(unit, campaign.bundle_size, campaign.bundle_price_cents, len(wanted)),
                 access_token_hash=hash_token(token),
-                checkout_expires_at=now + timedelta(minutes=s.checkout_window_minutes),
-                payment_expires_at=now + timedelta(minutes=s.pix_expiration_minutes),
+                checkout_expires_at=now + timedelta(minutes=checkout_minutes),
+                payment_expires_at=now + timedelta(minutes=payment_minutes),
             )
             db.add(order)
             db.flush()
@@ -221,7 +238,8 @@ def public_order_view(order: Order) -> dict[str, Any]:
     now = utcnow()
     checkout_open = order.status == "pending" and now < order.checkout_expires_at
     if order.status == "pending":
-        display = "awaiting_payment" if checkout_open else "awaiting_confirmation"
+        # No modo manual, "aguardando pagamento" vale até o fim da reserva (depois ela vence).
+        display = "awaiting_payment" if (checkout_open or s.is_manual) else "awaiting_confirmation"
     else:
         display = DISPLAY[order.status]
     payment = order.payment
@@ -234,6 +252,7 @@ def public_order_view(order: Order) -> dict[str, Any]:
         "quantity": order.quantity,
         "unit_price_cents": order.unit_price_cents,
         "total_cents": order.total_cents,
+        "discount_cents": order.unit_price_cents * order.quantity - order.total_cents,
         "created_at": order.created_at.isoformat(),
         "checkout_expires_at": order.checkout_expires_at.isoformat(),
         "server_time": now.isoformat(),
@@ -241,7 +260,7 @@ def public_order_view(order: Order) -> dict[str, Any]:
         "payment_mode": s.public_payment_mode,
         "pix": None,
     }
-    if checkout_open and payment is not None:
+    if checkout_open and payment is not None and not s.is_manual:
         data["pix"] = {
             "qr_code": payment.qr_code,
             "qr_code_base64": payment.qr_code_base64,

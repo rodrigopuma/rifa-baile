@@ -27,6 +27,7 @@ from ..models import AuditLog, Campaign, Order
 from ..schemas import CampaignSettingsIn
 from . import audit
 from .campaigns import create_numbers, resize_numbers
+from .pricing import order_total_cents
 
 log = logging.getLogger("rifa.config")
 
@@ -39,6 +40,66 @@ MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "a
          "setembro", "outubro", "novembro", "dezembro"]
 EXTENSO = {1: "último algarismo", 2: "dois últimos algarismos", 3: "três últimos algarismos",
            4: "quatro últimos algarismos", 5: "cinco últimos algarismos"}
+
+
+def duracao_extenso(minutos: int) -> str:
+    """90 → '1 hora e 30 minutos'; 1440 → '24 horas'."""
+    h, m = divmod(max(1, minutos), 60)
+    partes = []
+    if h:
+        partes.append(f"{h} hora" + ("s" if h != 1 else ""))
+    if m:
+        partes.append(f"{m} minuto" + ("s" if m != 1 else ""))
+    return " e ".join(partes)
+
+
+def _pacote(c: dict[str, Any]) -> tuple[int, int]:
+    """(quantidade, preço do pacote em centavos) a partir de campanha.pacote; (0, 0) se não houver."""
+    p = c.get("pacote") or {}
+    if not p or not p.get("quantidade"):
+        return 0, 0
+    try:
+        return int(p["quantidade"]), round(float(p.get("preco_reais", 0)) * 100)
+    except (TypeError, ValueError) as exc:
+        raise CampaignConfigError("pacote.quantidade e pacote.preco_reais devem ser números") from exc
+
+
+def _premio_extra(c: dict[str, Any]) -> tuple[int, str]:
+    """(acima de quantos números vendidos, prêmio maior); (0, '') se não houver."""
+    e = c.get("premio_extra") or {}
+    try:
+        n = int(e.get("acima_de_numeros") or 0)
+    except (TypeError, ValueError) as exc:
+        raise CampaignConfigError("premio_extra.acima_de_numeros deve ser um número") from exc
+    return (n, str(e.get("premio", "")).strip()) if n and e.get("premio") else (0, "")
+
+
+def titulo_premio(c: dict[str, Any]) -> str:
+    """Texto curto do prêmio exibido no site: 'R$ 150,00 garantido · R$ 250,00 se passar de 100 números vendidos'."""
+    base = str(c.get("premio", "")).strip()
+    n, extra = _premio_extra(c)
+    return f"{base} garantido · {extra} se passar de {n} números vendidos" if n else base
+
+
+def regra_premio(c: dict[str, Any]) -> str:
+    base = str(c.get("premio", "")).strip()
+    n, extra = _premio_extra(c)
+    if not n:
+        return f"Prêmio: {base}."
+    return (f"O prêmio é de {base}, garantido independentemente da quantidade de números vendidos. Se, até o "
+            f"momento da extração da Loteria Federal, mais de {n} números tiverem sido vendidos (contam "
+            f"apenas os pagamentos já confirmados pelo organizador), o prêmio passa a ser de {extra}.")
+
+
+def texto_pacote(c: dict[str, Any]) -> str:
+    size, bundle = _pacote(c)
+    if not size:
+        return ""
+    price = round(float(c.get("preco_reais", 0)) * 100)
+    ex = [(q, order_total_cents(price, size, bundle, q)) for q in (size, size + 1, size * 2)]
+    exemplos = "; ".join(f"{q} números = {brl(t)}" for q, t in ex)
+    return (f"Pacote: a cada {size} números no mesmo pedido, o conjunto custa {brl(bundle)} (em vez de "
+            f"{brl(price * size)}); o que sobrar de um grupo completo é cobrado ao preço normal. Exemplos: {exemplos}.")
 
 
 def brl(cents: int) -> str:
@@ -107,13 +168,16 @@ def _campaign_fields(cfg: dict[str, Any], regulation: str) -> dict[str, Any]:
     except (TypeError, ValueError) as exc:
         raise CampaignConfigError("preco_reais e quantidade_numeros devem ser números") from exc
     draw = c.get("data_sorteio") or None
+    bundle_size, bundle_price = _pacote(c)
     try:
         settings_in = CampaignSettingsIn(
             name=c.get("nome", "Rifa Solidária"),
             subtitle=c.get("subtitulo", ""),
             description=c.get("descricao", ""),
-            prize_title=c.get("premio", ""),
+            prize_title=titulo_premio(c),
             price_cents=price_cents,
+            bundle_size=bundle_size,
+            bundle_price_cents=bundle_price,
             total_numbers=total,
             draw_date=draw,
             organizer_name=o.get("nome", ""),
@@ -154,19 +218,22 @@ def render_regulation(cfg: dict[str, Any], template: str) -> str:
         "ultimo_numero": str(total).zfill(width),
         "preco": brl(round(float(c.get("preco_reais", 0)) * 100)),
         "premio": c.get("premio", ""),
+        "regra_premio": regra_premio(c),
+        "pacote": texto_pacote(c),
         "data_sorteio": data_extenso(d),
         "regra_sorteio": regra,
         "exemplo_sorteio": exemplo,
         "limite_por_pedido": str(s.max_numbers_per_order),
         "prazo_checkout": str(s.checkout_window_minutes),
         "prazo_pix": str(s.pix_expiration_minutes),
+        "prazo_reserva": duracao_extenso(s.manual_hold_minutes),
         "site": site.get("endereco", ""),
         "contato": " · ".join(contato) or "pelos canais do organizador",
     }
     out = template
     for key, value in values.items():
         out = out.replace("{{" + key + "}}", value)
-    return out.strip()
+    return "\n".join(line.rstrip() for line in out.splitlines()).strip()
 
 
 def last_applied_hash(db: Session) -> str | None:
@@ -201,11 +268,14 @@ def apply(db: Session, cfg: dict[str, Any], regulation: str, digest: str, *, for
         has_orders = db.execute(
             select(func.count()).select_from(Order).where(Order.campaign_id == campaign.id)
         ).scalar_one()
-        if has_orders and fields["price_cents"] != campaign.price_cents:
+        if has_orders and (fields["price_cents"], fields["bundle_size"], fields["bundle_price_cents"]) != (
+                campaign.price_cents, campaign.bundle_size, campaign.bundle_price_cents):
             db.rollback()
             raise CampaignConfigError(
-                f"O preço não pode mudar depois do primeiro pedido (atual: {brl(campaign.price_cents)}). "
-                "Volte o valor de preco_reais no campanha.json."
+                f"O preço e o pacote não podem mudar depois do primeiro pedido (atual: {brl(campaign.price_cents)}"
+                + (f", pacote {campaign.bundle_size} por {brl(campaign.bundle_price_cents)}"
+                   if campaign.bundle_size else "")
+                + "). Volte preco_reais/pacote no campanha.json ou apague os pedidos de teste."
             )
         try:
             resize_numbers(db, campaign, total)
@@ -218,7 +288,8 @@ def apply(db: Session, cfg: dict[str, Any], regulation: str, digest: str, *, for
     campaign.status = status
     audit.log(db, "campaign_config_applied", actor_type=actor_type, entity_type="campaign",
               entity_id=campaign.id, details={"hash": digest, "created": created, "status": status,
-                                              "total_numbers": total, "price_cents": fields["price_cents"]})
+                                              "total_numbers": total, "price_cents": fields["price_cents"],
+                                              "bundle_size": fields["bundle_size"]})
     try:
         db.commit()
     except IntegrityError as exc:

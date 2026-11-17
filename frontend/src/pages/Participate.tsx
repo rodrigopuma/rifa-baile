@@ -6,7 +6,7 @@ import { PageLoading, Spinner } from "../components/Spinner";
 import { useCampaignContext } from "../hooks/CampaignContext";
 import { useSelection } from "../hooks/SelectionContext";
 import { ApiError, api } from "../lib/api";
-import { digits, isValidCpf, isValidEmail, isValidPhone, maskCpf, maskPhone, money, padNumber } from "../lib/format";
+import { digits, durationLabel, isValidCpf, isValidEmail, isValidPhone, maskCpf, maskPhone, money, orderTotal, padNumber } from "../lib/format";
 import { saveOrderToken } from "../lib/orderStore";
 
 type Field = "full_name" | "phone" | "email" | "cpf" | "consent";
@@ -26,13 +26,17 @@ export default function Participate() {
   if (createdId) return <Navigate to={`/pedido/${createdId}`} replace />;
   if (selected.length === 0) return <Navigate to="/" replace />;
 
+  // Modo manual: só nome e WhatsApp. Pix direto na chave do organizador, que confirma o pagamento.
+  const manual = campaign.payment_mode === "manual";
   const errors: Partial<Record<Field, string>> = {};
   const name = form.full_name.trim().replace(/\s+/g, " ");
   if (name.length < 5 || name.split(" ").length < 2) errors.full_name = "Informe nome e sobrenome.";
   if (!isValidPhone(form.phone)) errors.phone = "Informe um celular com DDD, ex.: (81) 98888-7777.";
-  if (!isValidEmail(form.email)) errors.email = "Informe um e-mail válido.";
-  if (campaign.payer_cpf_required || digits(form.cpf)) {
-    if (!isValidCpf(form.cpf)) errors.cpf = "CPF inválido.";
+  if (!manual) {
+    if (!isValidEmail(form.email)) errors.email = "Informe um e-mail válido.";
+    if (campaign.payer_cpf_required || digits(form.cpf)) {
+      if (!isValidCpf(form.cpf)) errors.cpf = "CPF inválido.";
+    }
   }
   if (!consent) errors.consent = "É necessário concordar para participar.";
   const show = (f: Field) => (touched[f] ? errors[f] : undefined);
@@ -48,9 +52,9 @@ export default function Participate() {
       const { order, access_token } = await api.createOrder({
         numbers: selected,
         full_name: name,
-        email: form.email.trim(),
+        email: manual ? null : form.email.trim(),
         phone: digits(form.phone),
-        cpf: digits(form.cpf) || null,
+        cpf: manual ? null : digits(form.cpf) || null,
         privacy_consent: consent,
       });
       saveOrderToken(order.id, access_token);
@@ -77,7 +81,8 @@ export default function Participate() {
     }
   }
 
-  const total = selected.length * campaign.price_cents;
+  const total = orderTotal(campaign.price_cents, campaign.bundle_size, campaign.bundle_price_cents, selected.length);
+  const discount = selected.length * campaign.price_cents - total;
 
   return (
     <Layout campaign={campaign}>
@@ -89,6 +94,7 @@ export default function Participate() {
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-sm text-tunica">
             {selected.length} {selected.length === 1 ? "número" : "números"} × {money(campaign.price_cents)}
+            {discount > 0 ? <span className="block text-oliva">Pacote {campaign.bundle_size} por {money(campaign.bundle_price_cents)}: −{money(discount)}</span> : null}
           </p>
           <p className="font-numeral text-2xl text-militar">{money(total)}</p>
         </div>
@@ -122,6 +128,7 @@ export default function Participate() {
           />
           <FieldError id="whats-erro" msg={show("phone")} />
         </div>
+        {manual ? null : (<>
         <div>
           <label htmlFor="email" className="rotulo">E-mail</label>
           <input
@@ -145,6 +152,7 @@ export default function Participate() {
           </p>
           <FieldError id="cpf-erro" msg={show("cpf")} />
         </div>
+        </>)}
 
         <div className="rounded-md bg-oliva-50/70 px-4 py-3 text-[13px] leading-relaxed text-grafite/90">
           <label className="flex cursor-pointer items-start gap-3">
@@ -153,8 +161,9 @@ export default function Participate() {
               onChange={(e) => { setConsent(e.target.checked); setTouched({ ...touched, consent: true }); }}
             />
             <span>
-              Concordo com o tratamento dos meus dados (nome, WhatsApp, e-mail e CPF) exclusivamente para registrar
-              minha participação, processar o pagamento via Pix e contatar-me em caso de premiação, conforme a{" "}
+              {manual
+                ? "Concordo com o tratamento dos meus dados (nome e WhatsApp) exclusivamente para registrar minha reserva, conferir o pagamento feito por Pix e contatar-me em caso de premiação, conforme a"
+                : "Concordo com o tratamento dos meus dados (nome, WhatsApp, e-mail e CPF) exclusivamente para registrar minha participação, processar o pagamento via Pix e contatar-me em caso de premiação, conforme a"}{" "}
               <Link to="/privacidade" className="font-medium text-oliva underline">política de privacidade</Link> e o{" "}
               <Link to="/regulamento" className="font-medium text-oliva underline">regulamento</Link>.
             </span>
@@ -165,10 +174,14 @@ export default function Participate() {
         {serverError ? <Notice tone="error">{serverError}</Notice> : null}
 
         <button type="submit" className="botao w-full" disabled={submitting}>
-          {submitting ? <><Spinner /> Gerando Pix…</> : `Gerar Pix de ${money(total)}`}
+          {submitting
+            ? <><Spinner /> {manual ? "Reservando…" : "Gerando Pix…"}</>
+            : manual ? `Reservar ${selected.length === 1 ? "número" : "números"} · ${money(total)}` : `Gerar Pix de ${money(total)}`}
         </button>
         <p className="text-center text-xs text-tunica">
-          Os números ficam reservados para você enquanto o Pix estiver válido.
+          {manual
+            ? `Os números ficam reservados por ${durationLabel(campaign.reservation_hold_minutes ?? 1440)}. Na próxima tela você vê como pagar por Pix e avisa o organizador, que confirma o pagamento.`
+            : "Os números ficam reservados para você enquanto o Pix estiver válido."}
         </p>
       </form>
     </Layout>

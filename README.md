@@ -8,9 +8,13 @@ comprovante. O organizador acompanha tudo em um painel administrativo.
 [`REGULAMENTO.md`](REGULAMENTO.md). Para publicar de graça, veja [Publicar de graça](#publicar-de-graça) ou use o
 [`PROMPT_CONFIGURACAO.md`](PROMPT_CONFIGURACAO.md) com o Claude Code.
 
-> **O sistema começa em ambiente de testes.** Por padrão ele usa um **simulador local** de Pix. Também pode usar as
-> **credenciais de teste do Mercado Pago**. Cobranças reais ficam **bloqueadas no código** até que você confirme
-> duas coisas: a autorização legal da modalidade e a aceitação pelo Mercado Pago (ver [Produção](#produção)).
+> **Três modos de pagamento** (variável `PAYMENT_MODE`):
+>
+> | Modo | Como funciona | Quando usar |
+> |---|---|---|
+> | `manual_pix` | O participante reserva os números, paga por Pix **direto na sua chave** e você **confirma no painel**. Sem Mercado Pago, sem CPF. | **Uso real** (ver [Modo manual](#modo-manual-pix-direto--você-confirma)) |
+> | `simulator` | Simulador local de Pix, sem valor real. | Testes locais |
+> | `mercadopago_test` / `mercadopago_live` | Pix automático pelo Mercado Pago. Cobranças reais ficam **bloqueadas no código** até você confirmar a autorização legal e a aceitação pelo Mercado Pago (ver [Produção](#produção)). | Só se o Mercado Pago aceitar a modalidade |
 
 ## Estrutura
 
@@ -31,12 +35,55 @@ render.yaml            API no Render (plano gratuito)
 .github/workflows/     site no GitHub Pages + testes automáticos
 ```
 
+## Modo manual (Pix direto + você confirma)
+
+`PAYMENT_MODE=manual_pix`. É o modo pensado para uma rifa pessoal: o dinheiro cai direto na sua conta e você controla cada confirmação.
+
+**Fluxo do participante**
+### Pacote e prêmio (campanha.json)
+
+- `preco_reais` é o número avulso; `pacote` (`quantidade` + `preco_reais`) vale **a cada grupo** no mesmo pedido:
+  com 3 por R$ 25 e número a R$ 10, 3 = R$ 25, 4 = R$ 35, 5 = R$ 45, 6 = R$ 50. O servidor sempre recalcula o total.
+- `premio` é o valor garantido; `premio_extra` (`acima_de_numeros` + `premio`) sobe o prêmio se passar de N números
+  **pagos e confirmados** até a extração. O texto do site e do regulamento é gerado daí.
+- Depois do primeiro pedido, preço e pacote ficam travados. Para trocar, apague os pedidos de teste antes
+  (`supabase/utilitarios/limpar_pedidos_de_teste.sql`).
+
+### Aviso no celular a cada reserva (ntfy)
+
+1. Instale o app **ntfy** (iPhone ou Android) e assine um tópico com nome longo e aleatório.
+2. No Render, defina `NTFY_TOPIC` com esse mesmo nome. Pronto: cada reserva chega como notificação
+   ("Nova reserva · R$ 25,00 – Fulano reservou 3 números…") e tocar nela abre o painel já filtrado no pedido.
+3. O aviso leva só nome, números e código do pedido (nunca telefone). Se o ntfy cair, a reserva funciona normalmente.
+
+1. Escolhe os números e informa **só nome e WhatsApp** (sem e-mail e sem CPF).
+2. Os números ficam **reservados por 24 h** (`MANUAL_HOLD_MINUTES`, padrão 1440).
+3. A tela mostra sua **chave Pix** (botão de copiar) e o valor. Ele paga no app do banco.
+4. Toca em **Enviar comprovante no WhatsApp**: abre a conversa com você, com a mensagem pronta (nome, números, pedido, valor).
+5. Quando você confirma, a página dele muda sozinha para **Confirmado** e libera o comprovante.
+
+**Seu fluxo (painel `/admin` → Visão geral)**
+1. Chega o comprovante no WhatsApp. Você confere no app do banco se o Pix caiu.
+2. No painel, o pedido aparece como **Pendente**. Clique em **Confirmar** (pede uma confirmação antes). Os números viram **Pagos**.
+3. Se o participante sumiu, **Cancelar reserva** libera os números na hora. Se não fizer nada, a reserva **vence sozinha** e os números voltam para a venda.
+4. Confirmou sem querer ou devolveu o Pix? **Estornar (liberar números)** desfaz.
+5. Pagou depois que a reserva venceu? **Confirmar pagamento tardio** funciona se os números ainda estiverem livres; se outra pessoa já pegou, o painel avisa e você combina a devolução.
+
+**Configuração**
+- A **sua chave Pix** fica em `campanha.json` → `pagamento.pix_chave` (e, opcionalmente, `pix_tipo` e `pix_titular`). Enquanto estiver vazia, o site manda o participante pedir a chave pelo WhatsApp.
+- O WhatsApp que recebe os comprovantes é o de `organizador.whatsapp`.
+- No Render, troque `PAYMENT_MODE` para `manual_pix` (o `render.yaml` já vem assim). Não precisa de `MP_ACCESS_TOKEN` nem de `MP_WEBHOOK_SECRET`.
+- O `REGULAMENTO.md` descreve este fluxo (reserva, prazo, comprovante, confirmação pelo organizador).
+
+**O que continua garantido:** reserva atômica (dois participantes nunca ficam com o mesmo número), preço sempre calculado no servidor, link do pedido protegido por token e registro de cada ação sua (`audit_logs`).
+
 ## Arquivo único de configuração
 
 | Seção do `campanha.json` | O que controla |
 |---|---|
 | `campanha` | nome, subtítulo, descrição, prêmio, preço, quantidade de números, data do sorteio, status |
 | `organizador` | seu nome, apresentação, WhatsApp, Instagram, foto (`frontend/public/organizador.jpg`) e mensagem de agradecimento |
+| `pagamento` | chave Pix, tipo e titular exibidos ao participante (modo manual) |
 | `site` | textos do cabeçalho, lema, aviso de iniciativa pessoal e endereço do site |
 | `regulamento` | arquivo do regulamento (`REGULAMENTO.md`) |
 
@@ -143,7 +190,7 @@ cancelada na hora e o pedido é recusado.
 | Webhooks | A assinatura `x-signature` (HMAC-SHA256) é validada e o webhook é deduplicado por `x-request-id`. O status **sempre** vem de `GET /v1/payments/{id}`, nunca do corpo da notificação. As transições são idempotentes e não geram logs ou efeitos duplicados. |
 | Conciliação | Roda a cada 30 s dentro da API. Encerra checkouts vencidos, consulta pagamentos pendentes e retenta cancelamentos. Se rodar com várias instâncias, use `RUN_BACKGROUND_RECONCILER=false` nelas e um único cron com `python -m app.worker --once`. |
 | Valor divergente | Se o valor pago for diferente do pedido, ou se a referência ou o modo (teste/produção) não corresponderem, o pedido vai para análise. |
-| Admin | Não existe aprovação manual. O painel só oferece "Consultar Mercado Pago" e "Cancelar cobrança". |
+| Admin | Nos modos do Mercado Pago não existe aprovação manual: o painel só oferece "Consultar Mercado Pago" e "Cancelar cobrança" (as rotas de confirmação respondem 409). A confirmação manual só existe no `manual_pix`. |
 
 ## Painel administrativo (`/admin`)
 
@@ -151,7 +198,8 @@ cancelada na hora e o pedido é recusado.
   Busca por nome, e-mail, telefone, número ou código do pedido. Também mostra os números de cada participante e
   exporta CSV (separado por `;`, abre direto no Excel).
 - **Pagamentos:** histórico com status (pendente, aprovado, cancelado, expirado, reembolsado, em análise, recusado),
-  botão de atualização por consulta ao Mercado Pago e registro de ações (`audit_logs`).
+  botão de atualização por consulta ao Mercado Pago (nos modos do Mercado Pago) e registro de ações (`audit_logs`).
+- **Modo manual:** cada pedido tem **Confirmar**, **Cancelar reserva**, **Estornar** e **Chamar no WhatsApp**.
 - **Configurações:** nome, subtítulo, descrição, preço, quantidade de números, data do sorteio, organizador,
   regulamento, autorização, imagem de cabeçalho e status. Só uma campanha pode estar ativa (índice único no banco).
   O preço fica travado depois do primeiro pedido. A quantidade de números só pode ser reduzida se os números
@@ -188,7 +236,7 @@ Passo a passo resumido (o [`PROMPT_CONFIGURACAO.md`](PROMPT_CONFIGURACAO.md) gui
    ordem. Em **Connect**, copie a connection string do **Session pooler** (porta 5432). O Render só conecta por IPv4, e a
    conexão direta do Supabase é IPv6. Troque o prefixo para `postgresql+psycopg://`.
 3. **Render:** *New → Blueprint* → escolha o repositório (usa o `render.yaml`). Preencha as variáveis:
-   - `DATABASE_URL`, `SUPABASE_URL` e `SUPABASE_JWT_SECRET`.
+   - `DATABASE_URL`, `SUPABASE_URL` e `SUPABASE_JWT_SECRET`. O `PAYMENT_MODE` já vem como `manual_pix` no `render.yaml`.
    - `PUBLIC_BASE_URL`: a URL `.onrender.com`.
    - `FRONTEND_URL`: `https://<usuario>.github.io/<repo>`.
    - `CORS_ORIGINS`: `https://<usuario>.github.io`.
@@ -215,7 +263,8 @@ aprovação manual, campanha ativa única, travas de produção, RLS do papel `a
 
 ## Produção
 
-1. **Antes de qualquer cobrança real**, verifique dois pontos. Sorteios com venda de números dependem de autorização
+0. No modo `manual_pix` não há processador de pagamento, mas a questão legal continua valendo: sorteio com venda de números depende de autorização prévia do Ministério da Fazenda, que hoje não é concedida a pessoa física. Mantenha a rifa pequena e entre conhecidos, e decida isso com consciência.
+1. **Antes de qualquer cobrança real pelo Mercado Pago**, verifique dois pontos. Sorteios com venda de números dependem de autorização
    prévia do Ministério da Fazenda, que hoje não é concedida a pessoa física. Além disso, a lista de produtos
    proibidos do Mercado Pago inclui rifas. O código não substitui essa verificação.
 2. Depois disso, configure:

@@ -5,12 +5,12 @@ import type { AdminApi, AdminCampaign } from "./adminApi";
 import { StatusBadge } from "./ui";
 
 type FormState = {
-  name: string; subtitle: string; description: string; prize_title: string; price: string; total_numbers: string; draw_date: string;
+  name: string; subtitle: string; description: string; prize_title: string; price: string; bundle_size: string; bundle_price: string; total_numbers: string; draw_date: string;
   organizer_name: string; organizer_contact: string; regulation_text: string; authorization_info: string; header_image_url: string;
 };
 
 const EMPTY: FormState = {
-  name: "Rifa Solidária", subtitle: "Baile de Formatura de Aspirantes-a-Oficial", description: "", prize_title: "", price: "10,00", total_numbers: "300",
+  name: "Rifa Solidária", subtitle: "Baile de Formatura de Aspirantes-a-Oficial", description: "", prize_title: "", price: "10,00", bundle_size: "0", bundle_price: "0,00", total_numbers: "300",
   draw_date: "", organizer_name: "", organizer_contact: "", regulation_text: "", authorization_info: "", header_image_url: "",
 };
 
@@ -19,7 +19,8 @@ const STATUS_LABEL: Record<string, string> = { draft: "Rascunho", active: "Ativa
 function toForm(c: AdminCampaign): FormState {
   return {
     name: c.name, subtitle: c.subtitle, description: c.description, prize_title: c.prize_title,
-    price: (c.price_cents / 100).toFixed(2).replace(".", ","), total_numbers: String(c.total_numbers),
+    price: (c.price_cents / 100).toFixed(2).replace(".", ","), bundle_size: String(c.bundle_size),
+    bundle_price: (c.bundle_price_cents / 100).toFixed(2).replace(".", ","), total_numbers: String(c.total_numbers),
     draw_date: c.draw_date ?? "", organizer_name: c.organizer_name, organizer_contact: c.organizer_contact,
     regulation_text: c.regulation_text, authorization_info: c.authorization_info, header_image_url: c.header_image_url,
   };
@@ -49,10 +50,12 @@ export default function SettingsTab({ api }: { api: AdminApi }) {
   async function save(e: FormEvent) {
     e.preventDefault();
     const price_cents = Math.round(Number(form.price.replace(/\./g, "").replace(",", ".")) * 100);
+    const bundle_price_cents = Math.round(Number(form.bundle_price.replace(/\./g, "").replace(",", ".")) * 100);
     const body = {
-      ...form, price_cents, total_numbers: Number(form.total_numbers), draw_date: form.draw_date || null,
+      ...form, price_cents, bundle_size: Number(form.bundle_size) || 0, bundle_price_cents: Number(form.bundle_size) >= 2 ? bundle_price_cents : 0, total_numbers: Number(form.total_numbers), draw_date: form.draw_date || null,
     } as Record<string, unknown>;
     delete body.price;
+    delete body.bundle_price;
     setBusy(true);
     setMsg(null);
     try {
@@ -100,7 +103,15 @@ export default function SettingsTab({ api }: { api: AdminApi }) {
         <F label="Descrição (finalidade solidária)" id="c-desc">
           <textarea id="c-desc" className="campo" rows={3} value={form.description} onChange={set("description")} />
         </F>
-        <F label="Prêmio" id="c-premio"><input id="c-premio" className="campo" placeholder="Ex.: R$ 100,00 no Pix" value={form.prize_title} onChange={set("prize_title")} /></F>
+        <F label="Prêmio" id="c-premio"><input id="c-premio" className="campo" placeholder="Ex.: R$ 150,00 garantido · R$ 250,00 se passar de 100 números vendidos" value={form.prize_title} onChange={set("prize_title")} /></F>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <F label="Pacote: quantidade" id="c-pq" hint="A cada N números no mesmo pedido vale o preço do pacote. 0 = sem pacote.">
+            <input id="c-pq" className="campo" type="number" min={0} max={100} value={form.bundle_size} onChange={set("bundle_size")} />
+          </F>
+          <F label="Pacote: preço do grupo (R$)" id="c-pp" hint="Não pode ser alterado após o primeiro pedido.">
+            <input id="c-pp" className="campo" inputMode="decimal" value={form.bundle_price} onChange={set("bundle_price")} />
+          </F>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <F label="Preço por número (R$)" id="c-preco" hint="Não pode ser alterado após o primeiro pedido.">
             <input id="c-preco" className="campo" inputMode="decimal" value={form.price} onChange={set("price")} required />

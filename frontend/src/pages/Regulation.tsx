@@ -16,6 +16,9 @@ export default function Regulation() {
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <Item label="Campanha" value={`${campaign.name} — ${campaign.subtitle}`} />
           <Item label="Valor por número" value={money(campaign.price_cents)} />
+          {campaign.bundle_size >= 2 ? (
+            <Item label="Pacote" value={`${campaign.bundle_size} por ${money(campaign.bundle_price_cents)}`} />
+          ) : null}
           {campaign.prize_title ? <Item label="Prêmio" value={campaign.prize_title} /> : null}
           <Item label="Quantidade de números" value={String(campaign.total_numbers)} />
           <Item label="Sorteio previsto" value={campaign.draw_date ? dateLong(campaign.draw_date) : "A definir"} />

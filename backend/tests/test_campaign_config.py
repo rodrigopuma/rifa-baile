@@ -35,11 +35,15 @@ def test_real_config_file_creates_campaign(fresh_db, cfg_dir):
         r = apply_from_file(db, path=cfg_dir / "campanha.json")
         assert r["applied"] and r["created"]
         c = db.execute(select(Campaign)).scalar_one()
-        assert (c.status, c.price_cents, c.total_numbers) == ("active", 500, 200)
-        assert c.prize_title == json.loads((cfg_dir / "campanha.json").read_text(encoding="utf-8"))["campanha"]["premio"]
+        assert (c.status, c.price_cents, c.total_numbers) == ("active", 1000, 200)
+        assert (c.bundle_size, c.bundle_price_cents) == (3, 2500)
+        # prêmio garantido + prêmio maior acima de N números vendidos (campanha.json → premio / premio_extra)
+        assert c.prize_title == "R$ 150,00 garantido · R$ 250,00 se passar de 100 números vendidos"
         assert c.organizer_name == "Rodrigo"
         assert "{{" not in c.regulation_text and "resto da divisão" in c.regulation_text
-        assert "R$ 5,00" in c.regulation_text and "001 a 200" in c.regulation_text
+        assert "R$ 10,00" in c.regulation_text and "001 a 200" in c.regulation_text
+        assert "4 números = R$ 35,00" in c.regulation_text          # pacote descrito com exemplos
+        assert "mais de 100 números" in c.regulation_text and "R$ 250,00" in c.regulation_text
         n = db.execute(select(func.count()).select_from(RaffleNumber)).scalar_one()
         assert n == 200
         # mesmo conteúdo: não reaplica
@@ -56,7 +60,9 @@ def test_changes_are_applied_and_guards_respected(client, cfg_dir):
                                               "phone": "81988887777", "cpf": "52998224725",
                                               "privacy_consent": True})
             apply_from_file(db, path=p)
-    _edit(p, campanha__preco_reais=10.0, campanha__quantidade_numeros=150, campanha__premio="R$ 150,00")
+    # sem pacote e sem prêmio extra: igual à campanha de teste (R$ 10, sem desconto)
+    _edit(p, campanha__preco_reais=10.0, campanha__quantidade_numeros=150, campanha__premio="R$ 150,00",
+          campanha__pacote={}, campanha__premio_extra={})
     with new_session() as db:
         r = apply_from_file(db, path=p)
         assert r["applied"] and not r["created"]

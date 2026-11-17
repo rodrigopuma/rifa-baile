@@ -19,6 +19,7 @@ from ..schemas import CampaignSettingsIn, CampaignStatusIn
 from ..security import require_admin
 from ..services import audit
 from ..services import campaigns as campaign_svc
+from ..services import manual as manual_svc
 from ..services.payments import request_cancellation, sync_payment
 from ..validators import format_phone, only_digits
 
@@ -109,6 +110,8 @@ def me(admin: AdminUser = Depends(require_admin)) -> dict:
 
 @router.get("/overview")
 def overview(admin: AdminUser = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+    if get_settings().is_manual:
+        manual_svc.expire_due(db)
     c = _current_campaign(db)
     counts = campaign_svc.counts(db, c.id)
     gross = db.execute(
@@ -137,6 +140,8 @@ def overview(admin: AdminUser = Depends(require_admin), db: Session = Depends(ge
 def list_orders(q: str = "", status_filter: str | None = Query(default=None, alias="status"),
                 page: int = Query(default=1, ge=1), page_size: int = Query(default=25, ge=1, le=200),
                 admin: AdminUser = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+    if get_settings().is_manual:
+        manual_svc.expire_due(db)
     c = _current_campaign(db)
     stmt = select(Order).join(Participant).where(Order.campaign_id == c.id)
     cond = _search_filter(db, c, q)
@@ -225,6 +230,8 @@ def sync(payment_id: uuid.UUID, admin: AdminUser = Depends(require_admin), db: S
     payment = db.get(Payment, payment_id)
     if not payment:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagamento não encontrado")
+    if payment.provider == manual_svc.PROVIDER:
+        return _payment_row(payment)  # pagamentos manuais não têm provedor para consultar
     audit.log(db, "payment_sync_requested", actor_type="admin", actor_id=str(admin.id),
               entity_type="payment", entity_id=payment.provider_payment_id)
     db.commit()
@@ -239,14 +246,49 @@ def sync(payment_id: uuid.UUID, admin: AdminUser = Depends(require_admin), db: S
 @router.post("/orders/{order_id}/cancel")
 def cancel_order(order_id: uuid.UUID, admin: AdminUser = Depends(require_admin),
                  db: Session = Depends(get_db)) -> dict:
-    """Solicita ao provedor o cancelamento de uma cobrança pendente. Números só são liberados
-    após a confirmação do provedor. Não existe ação de aprovação manual."""
+    """Mercado Pago: solicita ao provedor o cancelamento da cobrança (números só são liberados
+    após a confirmação dele). Modo manual: cancela a reserva e libera os números na hora."""
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido não encontrado")
     if order.status != "pending":
         raise HTTPException(status.HTTP_409_CONFLICT, "Apenas pedidos pendentes podem ser cancelados")
+    if get_settings().is_manual:
+        manual_svc.cancel(db, order_id, admin_id=str(admin.id))
+        db.expire_all()
+        return _order_row(db.get(Order, order_id))  # type: ignore[arg-type]
     order = request_cancellation(db, order_id, reason="admin", actor_type="admin", actor_id=str(admin.id))
+    db.expire_all()
+    return _order_row(db.get(Order, order_id))  # type: ignore[arg-type]
+
+
+def _manual_only() -> None:
+    if not get_settings().is_manual:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Disponível apenas no modo manual (PAYMENT_MODE=manual_pix). Nos modos do "
+                            "Mercado Pago os pagamentos são confirmados automaticamente.")
+
+
+@router.post("/orders/{order_id}/confirm")
+def confirm_order(order_id: uuid.UUID, admin: AdminUser = Depends(require_admin),
+                  db: Session = Depends(get_db)) -> dict:
+    """Modo manual: o organizador conferiu o Pix no banco e confirma o pagamento."""
+    _manual_only()
+    if not db.get(Order, order_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido não encontrado")
+    manual_svc.confirm(db, order_id, admin_id=str(admin.id))
+    db.expire_all()
+    return _order_row(db.get(Order, order_id))  # type: ignore[arg-type]
+
+
+@router.post("/orders/{order_id}/refund")
+def refund_order(order_id: uuid.UUID, admin: AdminUser = Depends(require_admin),
+                 db: Session = Depends(get_db)) -> dict:
+    """Modo manual: desfaz uma confirmação e libera os números."""
+    _manual_only()
+    if not db.get(Order, order_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido não encontrado")
+    manual_svc.refund(db, order_id, admin_id=str(admin.id))
     db.expire_all()
     return _order_row(db.get(Order, order_id))  # type: ignore[arg-type]
 
@@ -270,7 +312,8 @@ def _campaign_out(c: Campaign) -> dict[str, Any]:
     return {
         "id": str(c.id), "name": c.name, "subtitle": c.subtitle, "description": c.description,
         "prize_title": c.prize_title,
-        "price_cents": c.price_cents, "total_numbers": c.total_numbers,
+        "price_cents": c.price_cents, "bundle_size": c.bundle_size,
+        "bundle_price_cents": c.bundle_price_cents, "total_numbers": c.total_numbers,
         "draw_date": c.draw_date.isoformat() if c.draw_date else None,
         "organizer_name": c.organizer_name, "organizer_contact": c.organizer_contact,
         "regulation_text": c.regulation_text, "authorization_info": c.authorization_info,
@@ -306,8 +349,10 @@ def update_campaign(campaign_id: uuid.UUID, body: CampaignSettingsIn, admin: Adm
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada")
     data = body.model_dump()
     has_orders = db.execute(select(func.count()).select_from(Order).where(Order.campaign_id == c.id)).scalar_one()
-    if has_orders and data["price_cents"] != c.price_cents:
-        raise HTTPException(status.HTTP_409_CONFLICT, "O preço não pode ser alterado após o primeiro pedido.")
+    if has_orders and (data["price_cents"], data["bundle_size"], data["bundle_price_cents"]) != (
+            c.price_cents, c.bundle_size, c.bundle_price_cents):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "O preço e o pacote não podem ser alterados após o primeiro pedido.")
     before = _campaign_out(c)
     campaign_svc.resize_numbers(db, c, data.pop("total_numbers"))
     for k, v in data.items():

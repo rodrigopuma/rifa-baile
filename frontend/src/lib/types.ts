@@ -1,4 +1,4 @@
-export type PaymentMode = "simulator" | "test" | "live";
+export type PaymentMode = "simulator" | "manual" | "test" | "live";
 
 export interface Campaign {
   id: string;
@@ -7,6 +7,9 @@ export interface Campaign {
   description: string;
   prize_title: string;
   price_cents: number;
+  /** Pacote: a cada `bundle_size` números o grupo custa `bundle_price_cents` (0 = sem pacote). */
+  bundle_size: number;
+  bundle_price_cents: number;
   total_numbers: number;
   available_count: number;
   draw_date: string | null;
@@ -20,6 +23,8 @@ export interface Campaign {
   checkout_window_minutes: number;
   max_numbers_per_order: number;
   payer_cpf_required: boolean;
+  /** Só no modo manual: por quanto tempo os números ficam reservados. */
+  reservation_hold_minutes: number | null;
 }
 
 export interface Availability {
@@ -46,6 +51,7 @@ export interface OrderView {
   quantity: number;
   unit_price_cents: number;
   total_cents: number;
+  discount_cents?: number;
   created_at: string;
   checkout_expires_at: string;
   server_time: string;

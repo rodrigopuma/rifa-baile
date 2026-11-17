@@ -30,7 +30,7 @@ log = logging.getLogger("rifa.webhooks")
 @router.post("/mercadopago")
 async def mercadopago_webhook(request: Request) -> Response:
     s = get_settings()
-    if s.payment_mode == "simulator":
+    if s.payment_mode in ("simulator", "manual_pix"):
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
     q = request.query_params

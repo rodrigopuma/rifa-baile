@@ -6,20 +6,22 @@ REGULAMENTO — {{nome}} · {{subtitulo}}
 1.3. A rifa não é organizada, patrocinada nem endossada pelo Exército Brasileiro, pelo CPOR/R ou pela comissão de formatura.
 
 2. NÚMEROS E VALOR
-2.1. São {{quantidade}} números, de {{primeiro_numero}} a {{ultimo_numero}}, ao preço de {{preco}} cada.
+2.1. São {{quantidade}} números, de {{primeiro_numero}} a {{ultimo_numero}}, ao preço de {{preco}} cada. {{pacote}}
 2.2. Cada participante pode adquirir quantos números desejar, até {{limite_por_pedido}} por pedido.
 2.3. Podem participar somente pessoas maiores de 18 anos.
 
 3. COMO PARTICIPAR E PAGAR
-3.1. A participação é feita exclusivamente pelo site {{site}}: o participante escolhe os números, informa nome, WhatsApp, e-mail e CPF, e paga via Pix.
-3.2. Após a geração do Pix, o participante tem {{prazo_checkout}} minutos para pagar. Os números ficam reservados enquanto a cobrança puder ser paga (até {{prazo_pix}} minutos) e são liberados automaticamente se o pagamento não for confirmado.
-3.3. O número só é considerado vendido após a confirmação automática do pagamento. Em seguida, o participante recebe um comprovante com link seguro.
-3.4. Números já reservados ou vendidos aparecem como indisponíveis no site, sem identificação do comprador.
+3.1. A reserva é feita exclusivamente pelo site {{site}}: o participante escolhe os números e informa nome e WhatsApp.
+3.2. Feita a reserva, os números ficam reservados por {{prazo_reserva}}. Nesse prazo, o participante deve pagar por Pix, direto na chave do organizador exibida no site, e enviar o comprovante pelo WhatsApp.
+3.3. O número só é considerado vendido depois que o organizador confere o pagamento e o confirma no sistema. Em seguida, o site mostra ao participante o comprovante, com link seguro.
+3.4. O organizador poderá chamar o participante pelo WhatsApp informado na reserva para combinar o pagamento. Reservas sem pagamento e sem contato dentro do prazo podem ser canceladas pelo organizador, liberando os números.
+3.5. Se o pagamento não for confirmado até o fim do prazo, a reserva vence e os números voltam à venda. Quem pagar depois do prazo deve avisar o organizador: se os números ainda estiverem livres, a participação é confirmada; se já tiverem sido reservados por outra pessoa, o valor pago é devolvido integralmente.
+3.6. Números já reservados ou vendidos aparecem como indisponíveis no site, sem identificação do comprador.
 
 4. PRÊMIO
-4.1. Prêmio: {{premio}}.
+4.1. {{regra_premio}}
 4.2. O prêmio será pago ao ganhador via Pix, em até 3 (três) dias úteis após o contato do organizador, sem nenhum custo para o ganhador.
-4.3. O prêmio é pessoal e intransferível, e será pago somente ao titular do número sorteado, mediante confirmação do nome e do CPF informados na compra.
+4.3. O prêmio é pessoal e intransferível, e será pago somente ao titular do número sorteado, mediante confirmação do nome informado na reserva e de documento de identificação.
 
 5. SORTEIO
 5.1. O resultado será definido pela extração da Loteria Federal (Caixa Econômica Federal) do dia {{data_sorteio}}. Se não houver extração nessa data, vale a extração seguinte.
@@ -38,8 +40,8 @@ REGULAMENTO — {{nome}} · {{subtitulo}}
 7.3. O ganhador terá 90 (noventa) dias, a contar da divulgação, para receber o prêmio.
 
 8. DADOS PESSOAIS
-8.1. Os dados informados são usados somente para registrar a participação, processar o pagamento, emitir o comprovante e contatar o ganhador, conforme a Lei Geral de Proteção de Dados (Lei nº 13.709/2018).
-8.2. O CPF é enviado apenas ao processador de pagamento; o sistema da rifa armazena somente uma versão mascarada.
+8.1. Os dados informados (nome e WhatsApp) são usados somente para registrar a reserva, conferir o pagamento, emitir o comprovante e contatar o ganhador, conforme a Lei Geral de Proteção de Dados (Lei nº 13.709/2018).
+8.2. O site não solicita nem armazena CPF ou e-mail. O comprovante do Pix fica com o participante e com o organizador.
 8.3. O participante pode pedir acesso, correção ou exclusão dos seus dados pelo contato do organizador.
 
 9. DISPOSIÇÕES GERAIS

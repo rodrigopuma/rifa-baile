@@ -68,11 +68,11 @@ function Certificate({ r }: { r: R }) {
           <Row label="Pedido" value={r.code} />
           <Row label="Confirmado em" value={r.paid_at ? dateTime(r.paid_at) : "—"} />
           <Row label="Sorteio previsto" value={r.draw_date ? dateLong(r.draw_date) : "A definir"} />
-          <Row label="ID do pagamento" value={r.provider_payment_id ?? "—"} />
+          {r.payment_mode === "manual" ? null : <Row label="ID do pagamento" value={r.provider_payment_id ?? "—"} />}
           <Row label="Organizador" value={r.organizer_name || "—"} />
           {r.prize_title ? <Row label="Prêmio" value={r.prize_title} /> : null}
         </dl>
-        {r.payment_mode !== "live" ? (
+        {r.payment_mode !== "live" && r.payment_mode !== "manual" ? (
           <p className="mt-6 rounded bg-[#FBF5E6] px-3 py-2 text-center text-xs font-medium text-alerta">
             Emitido em ambiente de testes — documento sem valor.
           </p>

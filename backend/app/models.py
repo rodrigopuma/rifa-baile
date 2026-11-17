@@ -46,6 +46,11 @@ class Campaign(Base):
         CheckConstraint(_in("status", CAMPAIGN_STATUSES), name="ck_campaigns_status"),
         CheckConstraint("price_cents > 0", name="ck_campaigns_price"),
         CheckConstraint("total_numbers > 0 AND total_numbers <= 100000", name="ck_campaigns_total"),
+        CheckConstraint(
+            "(bundle_size = 0 AND bundle_price_cents = 0) OR "
+            "(bundle_size >= 2 AND bundle_price_cents > 0 AND bundle_price_cents < price_cents * bundle_size)",
+            name="ck_campaigns_bundle",
+        ),
         # Apenas uma campanha ativa por vez
         Index(
             "uq_campaigns_one_active",
@@ -62,6 +67,9 @@ class Campaign(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     prize_title: Mapped[str] = mapped_column(String(200), default="")
     price_cents: Mapped[int] = mapped_column(Integer)
+    # Pacote promocional: a cada `bundle_size` números do pedido, o grupo custa `bundle_price_cents`.
+    bundle_size: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    bundle_price_cents: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     total_numbers: Mapped[int] = mapped_column(Integer)
     draw_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     organizer_name: Mapped[str] = mapped_column(String(200), default="")
@@ -112,7 +120,8 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         CheckConstraint(_in("status", ORDER_STATUSES), name="ck_orders_status"),
-        CheckConstraint("total_cents = unit_price_cents * quantity", name="ck_orders_total"),
+        # O pacote dá desconto: o total nunca passa do preço cheio.
+        CheckConstraint("total_cents > 0 AND total_cents <= unit_price_cents * quantity", name="ck_orders_total"),
         Index("ix_orders_status_checkout", "status", "checkout_expires_at"),
         Index("ix_orders_participant", "participant_id"),
     )

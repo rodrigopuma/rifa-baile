@@ -14,6 +14,10 @@ def get_provider() -> PaymentProvider:
             from .simulator import SimulatorProvider
 
             _provider = SimulatorProvider()
+        elif s.payment_mode == "manual_pix":
+            from .manual import ManualProvider
+
+            _provider = ManualProvider()
         else:
             from .mercadopago import MercadoPagoProvider
 

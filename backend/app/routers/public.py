@@ -12,6 +12,7 @@ from ..ratelimit import SlidingWindowLimiter, enforce
 from ..schemas import OrderCreate
 from ..security import token_matches
 from ..services import campaigns as campaign_svc
+from ..services import manual as manual_svc
 from ..services.orders import create_order, public_order_view, receipt_view
 from ..services.payments import request_cancellation
 
@@ -29,6 +30,8 @@ def health() -> dict:
 @router.get("/campaign")
 def campaign_info(db: Session = Depends(get_db)) -> dict:
     s = get_settings()
+    if s.is_manual:
+        manual_svc.expire_due(db)
     c = campaign_svc.get_public_campaign(db)
     if c is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Nenhuma campanha publicada.")
@@ -40,6 +43,8 @@ def campaign_info(db: Session = Depends(get_db)) -> dict:
         "description": c.description,
         "prize_title": c.prize_title,
         "price_cents": c.price_cents,
+        "bundle_size": c.bundle_size,
+        "bundle_price_cents": c.bundle_price_cents,
         "total_numbers": c.total_numbers,
         "available_count": counts["available"],  # não expõe a contagem de reservados
         "draw_date": c.draw_date.isoformat() if c.draw_date else None,
@@ -52,12 +57,15 @@ def campaign_info(db: Session = Depends(get_db)) -> dict:
         "payment_mode": s.public_payment_mode,
         "checkout_window_minutes": s.checkout_window_minutes,
         "max_numbers_per_order": s.max_numbers_per_order,
-        "payer_cpf_required": s.payer_cpf_required,
+        "payer_cpf_required": s.payer_cpf_required and not s.is_manual,
+        "reservation_hold_minutes": s.manual_hold_minutes if s.is_manual else None,
     }
 
 
 @router.get("/campaign/availability")
 def availability(db: Session = Depends(get_db)) -> dict:
+    if get_settings().is_manual:
+        manual_svc.expire_due(db)
     c = campaign_svc.get_public_campaign(db)
     if c is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Nenhuma campanha publicada.")
@@ -73,7 +81,7 @@ def availability(db: Session = Depends(get_db)) -> dict:
 @router.post("/orders", status_code=status.HTTP_201_CREATED)
 def post_order(body: OrderCreate, request: Request, db: Session = Depends(get_db)) -> dict:
     enforce(order_limiter, request)
-    order, token = create_order(db, numbers=body.numbers, full_name=body.full_name, email=body.email,
+    order, token = create_order(db, numbers=body.numbers, full_name=body.full_name, email=body.email or "",
                                 phone=body.phone, cpf=body.cpf)
     return {"order": public_order_view(order), "access_token": token}
 
@@ -94,7 +102,11 @@ def _load_order(db: Session, order_id: str, token: str | None) -> Order:
 def get_order(order_id: str, request: Request, x_order_token: str | None = Header(default=None),
               db: Session = Depends(get_db)) -> dict:
     enforce(lookup_limiter, request)
-    return public_order_view(_load_order(db, order_id, x_order_token))
+    order = _load_order(db, order_id, x_order_token)
+    if get_settings().is_manual and order.status == "pending":
+        manual_svc.expire_order(db, order.id)  # vence a reserva se o prazo acabou
+        db.refresh(order)
+    return public_order_view(order)
 
 
 @router.post("/orders/{order_id}/checkout-timeout")
@@ -107,7 +119,10 @@ def checkout_timeout(order_id: str, request: Request, x_order_token: str | None 
     from ..db import utcnow
 
     if order.status == "pending" and utcnow() >= order.checkout_expires_at:
-        order = request_cancellation(db, order.id, reason="checkout_timeout", actor_type="participant")
+        if get_settings().is_manual:
+            order = manual_svc.expire_order(db, order.id)
+        else:
+            order = request_cancellation(db, order.id, reason="checkout_timeout", actor_type="participant")
     return public_order_view(db.get(Order, order.id))  # type: ignore[arg-type]
 
 

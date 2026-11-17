@@ -33,24 +33,31 @@ def test_admin_requires_valid_admin(client, fresh_db):
     assert client.get("/api/admin/overview", headers={"Authorization": f"Bearer {ok}"}).status_code == 200
 
 
+def _admin_operations() -> list[tuple[str, str]]:
+    """Todas as (método, caminho) de /api/admin, lidas do OpenAPI.
+
+    (Percorrer app.routes não serve: nas versões novas do FastAPI os routers incluídos ficam
+    aninhados e o laço não enxergaria nenhuma rota.)"""
+    from app.main import app
+
+    ops = [(m.upper(), path) for path, item in app.openapi()["paths"].items() if path.startswith("/api/admin")
+           for m in item if m in ("get", "post", "put", "delete", "patch")]
+    assert len(ops) >= 15, ops  # trava contra um teste que passa sem verificar nada
+    return ops
+
+
 def test_every_admin_route_is_protected(client):
-    from app.main import app
-
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        if not path.startswith("/api/admin"):
-            continue
-        for method in route.methods - {"HEAD", "OPTIONS"}:
-            url = path.replace("{payment_id}", str(uuid.uuid4())).replace("{order_id}", str(uuid.uuid4())) \
-                      .replace("{campaign_id}", str(uuid.uuid4()))
-            r = client.request(method, url, json={})
-            assert r.status_code == 401, (method, path, r.status_code)
+    for method, path in _admin_operations():
+        url = path.replace("{payment_id}", str(uuid.uuid4())).replace("{order_id}", str(uuid.uuid4())) \
+                  .replace("{campaign_id}", str(uuid.uuid4()))
+        r = client.request(method, url, json={})
+        assert r.status_code == 401, (method, path, r.status_code)
 
 
-def test_no_manual_approval_endpoint(client):
-    from app.main import app
-
-    paths = [getattr(r, "path", "") for r in app.routes if getattr(r, "path", "").startswith("/api/admin")]
+def test_no_unattended_approval_endpoint(client):
+    """Nos modos do Mercado Pago ninguém aprova pagamento na mão: a confirmação manual só existe
+    no modo manual e é recusada nos demais."""
+    paths = [p for _, p in _admin_operations()]
     assert not any("approve" in p for p in paths)
 
 

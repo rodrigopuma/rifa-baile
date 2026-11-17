@@ -11,10 +11,21 @@
     "nome": "Rifa Solidária",
     "subtitulo": "Baile de Formatura de Aspirantes-a-Oficial",
     "descricao": "Olá! Sou o Rodrigo, Aspirante-a-Oficial formando do CPOR/R. Criei esta rifa para ajudar a custear a minha participação no baile de formatura. Cada número custa pouco, ajuda muito e ainda concorre a um prêmio!",
-    "premio": "R$ 150,00 no Pix",
-    "preco_reais": 5.00,
+    "premio": "R$ 150,00",
+    "_premio": "Prêmio garantido (pago por Pix ao ganhador). Se premio_extra existir, o site mostra 'garantido' ao lado.",
+    "premio_extra": {
+      "acima_de_numeros": 100,
+      "premio": "R$ 250,00",
+      "_premio_extra": "Se passar de 100 números vendidos (pagos e confirmados) até o sorteio, o prêmio sobe para este valor. Apague este bloco para ter só o prêmio garantido."
+    },
+    "preco_reais": 10.00,
+    "pacote": {
+      "quantidade": 3,
+      "preco_reais": 25.00,
+      "_pacote": "A cada 3 números no mesmo pedido, o grupo custa R$ 25,00 (3 = 25, 4 = 35, 5 = 45, 6 = 50...). Para não ter pacote, apague este bloco. Depois do primeiro pedido, preço e pacote ficam travados."
+    },
     "quantidade_numeros": 200,
-    "data_sorteio": "2026-12-19",
+    "data_sorteio": "2026-12-09",
     "_data_sorteio": "TROCAR se necessário. Use a data de um concurso da Loteria Federal (sorteios às quartas e aos sábados). Formato AAAA-MM-DD.",
     "status": "active",
     "_status": "active = vendendo | paused = pausada | closed = encerrada | draft = rascunho",
@@ -32,6 +43,17 @@
     "foto": "organizador.jpg",
     "_foto": "Arquivo dentro de frontend/public/. Formato retrato (4:5) fica melhor.",
     "agradecimento": "Seu apoio me ajuda a chegar ao baile de formatura. Muito obrigado!"
+  },
+
+  "pagamento": {
+    "_pix": "Modo manual (PAYMENT_MODE=manual_pix): o participante reserva os números, paga por Pix direto na SUA chave e você confirma no painel. TROCAR pela sua chave Pix. Enquanto estiver vazia, o site manda o participante pedir a chave pelo WhatsApp.",
+    "pix_chave": "81986302122",
+    "_pix_tipo": "Opcional: Celular, CPF, E-mail ou Aleatória. Só para o participante saber que tipo de chave é.",
+    "pix_tipo": "Celular",
+    "_pix_cidade": "Cidade do recebedor (aparece no Pix copia e cola/QR Code; sem acentos).",
+    "pix_cidade": "Recife",
+    "_pix_titular": "Opcional: nome que aparece no app do banco ao pagar (para o participante conferir).",
+    "pix_titular": "Luiz Rodrigo Puma Lima"
   },
 
   "site": {
