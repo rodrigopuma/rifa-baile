@@ -153,13 +153,13 @@ def test_config_change_of_bundle_blocked_after_orders(client, bundled, tmp_path)
 def test_minimum_numbers_rule_in_regulation(fresh_db, tmp_path):
     shutil.copy(ROOT / "REGULAMENTO.md", tmp_path / "REGULAMENTO.md")
     cfg = json.loads((ROOT / "campanha.json").read_text(encoding="utf-8"))
-    assert cfg["campanha"]["minimo_numeros"] == 15
+    assert cfg["campanha"]["minimo_numeros"] == 20
     p = tmp_path / "campanha.json"
     p.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
     with new_session() as db:
         apply_from_file(db, path=p)
         reg = db.execute(select(Campaign)).scalar_one().regulation_text
-    assert "6.3. A rifa tem mínimo de 15 números" in reg and "devolvendo integralmente" in reg
+    assert "6.3. A rifa tem mínimo de 20 números" in reg and "devolvendo integralmente" in reg
     assert "ressalvado o mínimo de números previsto no item 6.3" in reg
 
     cfg["campanha"]["minimo_numeros"] = 0                      # sem mínimo: a cláusula some

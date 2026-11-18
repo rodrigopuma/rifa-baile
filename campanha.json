@@ -18,7 +18,7 @@
       "premio": "R$ 250,00",
       "_premio_extra": "Se passar de 100 números vendidos (pagos e confirmados) até o sorteio, o prêmio sobe para este valor. Apague este bloco para ter só o prêmio garantido."
     },
-    "minimo_numeros": 15,
+    "minimo_numeros": 20,
     "_minimo_numeros": "Mínimo de números vendidos (pagos e confirmados) até o sorteio. Abaixo disso, o organizador pode cancelar a rifa e devolver tudo. Use 0 para não ter mínimo.",
     "preco_reais": 10.00,
     "pacote": {
