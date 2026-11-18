@@ -33,6 +33,7 @@ REGULAMENTO — {{nome}} · {{subtitulo}}
 6. ADIAMENTO E CANCELAMENTO
 6.1. O organizador poderá adiar o sorteio uma única vez, por até 30 (trinta) dias, comunicando a nova data no site e aos participantes.
 6.2. Em caso de cancelamento da rifa, todos os valores pagos serão devolvidos integralmente aos participantes.
+{{regra_minimo}}
 
 7. RESULTADO E CONTATO COM O GANHADOR
 7.1. O número ganhador e o primeiro nome do ganhador serão divulgados no site e pelos canais do organizador em até 24 horas após a extração.

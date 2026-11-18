@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import re
 import hashlib
 import json
 import logging
@@ -81,12 +82,29 @@ def titulo_premio(c: dict[str, Any]) -> str:
     return f"{base} garantido · {extra} se passar de {n} números vendidos" if n else base
 
 
+def minimo_numeros(c: dict[str, Any]) -> int:
+    try:
+        return max(0, int(c.get("minimo_numeros") or 0))
+    except (TypeError, ValueError) as exc:
+        raise CampaignConfigError("minimo_numeros deve ser um número inteiro") from exc
+
+
+def regra_minimo(c: dict[str, Any]) -> str:
+    n = minimo_numeros(c)
+    if not n:
+        return ""
+    return (f"6.3. A rifa tem mínimo de {n} números vendidos (contam apenas os pagamentos confirmados). Se, até a "
+            f"data da extração da Loteria Federal, menos de {n} números tiverem sido vendidos, o organizador poderá "
+            "cancelar a rifa, devolvendo integralmente os valores pagos (item 6.2), ou, a seu critério, manter o sorteio.")
+
+
 def regra_premio(c: dict[str, Any]) -> str:
     base = str(c.get("premio", "")).strip()
     n, extra = _premio_extra(c)
+    ressalva = ", ressalvado o mínimo de números previsto no item 6.3" if minimo_numeros(c) else ""
     if not n:
-        return f"Prêmio: {base}."
-    return (f"O prêmio é de {base}, garantido independentemente da quantidade de números vendidos. Se, até o "
+        return f"Prêmio: {base}{ressalva}."
+    return (f"O prêmio é de {base}, garantido independentemente da quantidade de números vendidos{ressalva}. Se, até o "
             f"momento da extração da Loteria Federal, mais de {n} números tiverem sido vendidos (contam "
             f"apenas os pagamentos já confirmados pelo organizador), o prêmio passa a ser de {extra}.")
 
@@ -220,6 +238,8 @@ def render_regulation(cfg: dict[str, Any], template: str) -> str:
         "premio": c.get("premio", ""),
         "regra_premio": regra_premio(c),
         "pacote": texto_pacote(c),
+        "regra_minimo": regra_minimo(c),
+        "minimo_numeros": str(minimo_numeros(c)),
         "data_sorteio": data_extenso(d),
         "regra_sorteio": regra,
         "exemplo_sorteio": exemplo,
@@ -233,7 +253,8 @@ def render_regulation(cfg: dict[str, Any], template: str) -> str:
     out = template
     for key, value in values.items():
         out = out.replace("{{" + key + "}}", value)
-    return "\n".join(line.rstrip() for line in out.splitlines()).strip()
+    out = "\n".join(line.rstrip() for line in out.splitlines()).strip()
+    return re.sub(r"\n{3,}", "\n\n", out)
 
 
 def last_applied_hash(db: Session) -> str | None:

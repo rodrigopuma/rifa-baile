@@ -136,7 +136,7 @@ def test_config_without_bundle_or_extra_prize(fresh_db, tmp_path):
         apply_from_file(db, path=tmp_path / "campanha.json")
         c = db.execute(select(Campaign)).scalar_one()
         assert (c.bundle_size, c.bundle_price_cents, c.prize_title) == (0, 0, "R$ 150,00")
-        assert "Pacote" not in c.regulation_text and "Prêmio: R$ 150,00." in c.regulation_text
+        assert "Pacote" not in c.regulation_text and "Prêmio: R$ 150,00, ressalvado" in c.regulation_text
 
 
 def test_config_change_of_bundle_blocked_after_orders(client, bundled, tmp_path):
@@ -148,3 +148,23 @@ def test_config_change_of_bundle_blocked_after_orders(client, bundled, tmp_path)
     place(client, [1], i=901)
     with new_session() as db, pytest.raises(CampaignConfigError, match="primeiro pedido"):
         apply_from_file(db, path=tmp_path / "campanha.json")
+
+
+def test_minimum_numbers_rule_in_regulation(fresh_db, tmp_path):
+    shutil.copy(ROOT / "REGULAMENTO.md", tmp_path / "REGULAMENTO.md")
+    cfg = json.loads((ROOT / "campanha.json").read_text(encoding="utf-8"))
+    assert cfg["campanha"]["minimo_numeros"] == 15
+    p = tmp_path / "campanha.json"
+    p.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    with new_session() as db:
+        apply_from_file(db, path=p)
+        reg = db.execute(select(Campaign)).scalar_one().regulation_text
+    assert "6.3. A rifa tem mínimo de 15 números" in reg and "devolvendo integralmente" in reg
+    assert "ressalvado o mínimo de números previsto no item 6.3" in reg
+
+    cfg["campanha"]["minimo_numeros"] = 0                      # sem mínimo: a cláusula some
+    p.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    with new_session() as db:
+        apply_from_file(db, path=p, force=True)
+        reg = db.execute(select(Campaign)).scalar_one().regulation_text
+    assert "6.3" not in reg and "ressalvado" not in reg and "\n\n\n" not in reg
